@@ -547,7 +547,9 @@
   let totalDuration = 0;
   let doneIds = new Set();
   let videoEl = null;
-  let isProcessed = false;
+  let lastRenderedCardCount = -1;
+  let sortedNonTracked = [];
+  let sortedTracked = [];
   let profileCat = sessionStorage.getItem('profileCat') || 'legal';
   let profileText = sessionStorage.getItem('profileText') || '';
   let profileSummary = sessionStorage.getItem('profileSummary') || '';
@@ -640,67 +642,63 @@
     </div>`;
   }
 
-  function renderCards() {
+  function preSort() {
+    sortedNonTracked = cards.filter(c => c.trigger !== 'commitment').sort((a, b) => b.timestamp - a.timestamp);
+    sortedTracked = cards.filter(c => c.trigger === 'commitment').sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  function renderCards(force) {
     const container = document.getElementById('cards-scroll');
+    if (!container) return;
 
-    // Time-synced: cards only appear when video reaches their timestamp
-    const timeVisible = cards.filter(c =>
-      (filter === 'all' || c.trigger === filter) && c.timestamp <= currentTime
-    );
+    // Count visible cards — skip re-render if unchanged
+    const visibleCount = cards.filter(c => c.timestamp <= currentTime).length;
+    if (!force && visibleCount === lastRenderedCardCount) return;
+    lastRenderedCardCount = visibleCount;
 
-    // Split into tracked (accumulates) and non-tracked (max 3 per type, newest first)
-    const tracked = timeVisible.filter(c => c.trigger === 'commitment');
-    const nonTracked = timeVisible.filter(c => c.trigger !== 'commitment');
-
-    // For non-tracked: group by trigger type, keep only latest 3 per type
+    // Non-tracked: filter by time + active filter, max 3 per type
     const byType = {};
-    nonTracked.forEach(c => {
+    sortedNonTracked.forEach(c => {
+      if (c.timestamp > currentTime) return;
+      if (filter !== 'all' && c.trigger !== filter) return;
       if (!byType[c.trigger]) byType[c.trigger] = [];
-      byType[c.trigger].push(c);
+      if (byType[c.trigger].length < 3) byType[c.trigger].push(c);
     });
-    let displayNonTracked = [];
-    Object.values(byType).forEach(group => {
-      // Sort by timestamp descending (newest first), take max 3
-      const sorted = group.sort((a, b) => b.timestamp - a.timestamp).slice(0, 3);
-      displayNonTracked.push(...sorted);
-    });
-    // Sort all non-tracked by timestamp descending (newest on top)
-    displayNonTracked.sort((a, b) => b.timestamp - a.timestamp);
+    const displayNonTracked = Object.values(byType).flat().sort((a, b) => b.timestamp - a.timestamp);
 
-    // Tracked: sort by timestamp ascending (oldest first, newest at bottom — accumulates)
-    tracked.sort((a, b) => a.timestamp - b.timestamp);
+    // Tracked: all visible, accumulates
+    const tracked = (filter === 'all' || filter === 'commitment')
+      ? sortedTracked.filter(c => c.timestamp <= currentTime)
+      : [];
 
-    // Combine: non-tracked on top, tracked below
     const visible = [...displayNonTracked, ...tracked];
 
     if (visible.length === 0) {
-      container.innerHTML = `<div style="padding:40px 18px;text-align:center;color:var(--ink-3);font-size:13.5px;">
-        <div style="font-family:var(--font-serif);font-style:italic;font-size:32px;color:var(--ink-4);margin-bottom:8px;">—</div>
-        Listening. Insights will appear as the conversation unfolds.
-      </div>`;
+      container.innerHTML = '<div style="padding:40px 18px;text-align:center;color:var(--ink-3);font-size:13.5px;"><div style="font-family:var(--font-serif);font-style:italic;font-size:32px;color:var(--ink-4);margin-bottom:8px;">—</div>Listening. Insights will appear as the conversation unfolds.</div>';
     } else {
-      container.innerHTML = visible.map((c, i) => renderCard(c, cards.indexOf(c))).join('');
+      container.innerHTML = visible.map((c) => renderCard(c, cards.indexOf(c))).join('');
     }
 
-    // Update counts
     const countEl = document.getElementById('insight-count');
-    if (countEl) countEl.textContent = `${visible.length}/${cards.length}`;
+    if (countEl) countEl.textContent = visible.length + '/' + cards.length;
+  }
 
-    // Bind todo toggles
-    container.querySelectorAll('.todo-check').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.todo;
+  // Event delegation for cards container (todo toggles + time jumps)
+  function initCardEvents() {
+    const container = document.getElementById('cards-scroll');
+    if (!container) return;
+    container.addEventListener('click', (e) => {
+      const todoBtn = e.target.closest('.todo-check');
+      if (todoBtn) {
+        const id = todoBtn.dataset.todo;
         doneIds.has(id) ? doneIds.delete(id) : doneIds.add(id);
-        renderCards();
-      });
-    });
-
-    // Bind time jumps
-    container.querySelectorAll('[data-jump]').forEach(el => {
-      el.addEventListener('click', () => {
-        const t = parseFloat(el.dataset.jump);
-        if (videoEl) { videoEl.currentTime = t; }
-      });
+        renderCards(true);
+        return;
+      }
+      const jumpEl = e.target.closest('[data-jump]');
+      if (jumpEl && videoEl) {
+        videoEl.currentTime = parseFloat(jumpEl.dataset.jump);
+      }
     });
   }
 
@@ -738,7 +736,7 @@
     ).join('');
 
     document.querySelectorAll('[data-filter]').forEach(btn => {
-      btn.addEventListener('click', () => { filter = btn.dataset.filter; renderFilters(); renderCards(); });
+      btn.addEventListener('click', () => { filter = btn.dataset.filter; lastRenderedCardCount = -1; renderFilters(); renderCards(true); });
     });
   }
 
@@ -892,6 +890,7 @@
         const resp = await fetch('/process', { method: 'POST', body: formData });
         const result = await resp.json();
         cards = result.cards || [];
+        preSort();
         document.getElementById('debug-json').textContent = JSON.stringify(result, null, 2);
 
         // NOW show video in Playback panel
@@ -925,7 +924,6 @@
           playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
         });
 
-        isProcessed = true;
         processBtn.innerHTML = '▶ Play to begin';
         renderFilters();
         renderCards();
@@ -947,7 +945,8 @@
     });
 
     renderFilters();
-    renderCards();
+    renderCards(true);
+    initCardEvents();
   }
 
   document.addEventListener('DOMContentLoaded', buildPage);
