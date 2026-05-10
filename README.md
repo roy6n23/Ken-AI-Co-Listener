@@ -1,58 +1,55 @@
-# Ken — Explainable AI Co-Listener for Professional Conversations
+# Ken — AI Co-Listener for Professional Conversations
 
-> An open-source, domain-aware AI co-listener that gives explainable, personalized interventions during professional conversations — built on AMD ROCm.
-
-## The Problem
-
-When you talk to professionals — lawyers, accountants, doctors — they speak fast, in jargon, in *their* mental model. You miss things, don't know what to ask, and walk out confused.
-
-Existing solutions either summarize *after* it's too late (Otter, Fireflies) or intervene as a blackbox you can't predict (Hedy, Cluely).
-
-## How Ken is Different
-
-Ken intervenes through **4 explicit, explainable trigger types** — each tied to a real cognitive gap:
-
-| Trigger | Detects | User's Gap |
-|---------|---------|-----------|
-| 🟡 Jargon Bomb | Domain-specific terminology | "What does that mean?" |
-| 🔴 Impact Alert | Content affecting YOUR situation | "How does this affect me?" |
-| 🟢 Question Suggester | Vague/hedge language | "What should I ask?" |
-| 📌 Commitment Tracker | Dates, amounts, action items | "Will I remember this?" |
-
-Every intervention is **personalized** to your profile. Same conversation → different insights for different users.
-
-## Tech Stack
-
-- **ASR:** faster-whisper (medium)
-- **LLM:** Qwen3 on AMD Instinct MI300X via vLLM + ROCm
-- **Frontend:** Gradio with timestamp-synced card playback
-- **Infrastructure:** AMD Developer Cloud
+An AI co-listener that gives explainable, personalized interventions during professional conversations — built on AMD ROCm.
 
 ## Quick Start
 
 ```bash
 pip install -r requirements.txt
-python app.py
+python server.py
 ```
 
-Set your AMD endpoint:
+Open http://localhost:7860
+
+## Environment Variables
+
 ```bash
-export AMD_ENDPOINT="http://your-droplet-ip:8000/v1"
+export AMD_ENDPOINT="http://your-endpoint:8000/v1"
 export MODEL_NAME="Qwen/Qwen3-14B"
 ```
 
-## Demo Domain: Immigration Law
+## How It Works
 
-Our demo uses immigration lawyer conversations to showcase all 4 triggers. The same framework extends to any professional domain by customizing trigger prompts.
+1. **Onboarding** — User selects a domain (Legal/Medical/Immigration/Career) and describes their situation
+2. **Processing** — Upload a conversation recording → Whisper transcribes → LLM detects 4 trigger types
+3. **Session** — Cards appear time-synced as the video plays
 
-## Architecture
+## Trigger Types
+
+| Trigger | Detects | User's Gap |
+|---------|---------|-----------|
+| Jargon | Domain-specific terminology | "What does that mean?" |
+| Impact | Content affecting YOUR situation | "How does this affect me?" |
+| Question | Vague/hedge language | "What should I ask?" |
+| Tracked | Dates, amounts, action items | "Will I remember this?" |
+
+## Tech Stack
+
+- **ASR:** faster-whisper (base model, CPU)
+- **LLM:** Qwen3-14B on AMD Instinct MI300X via vLLM + ROCm
+- **Backend:** Flask
+- **Frontend:** Vanilla HTML/CSS/JS (Ken design system)
+- **Infrastructure:** AMD Developer Cloud
+
+## Project Structure
 
 ```
-Audio File + User Profile
-    → Whisper ASR (timestamped segments)
-    → 4x Trigger Detection (parallel, per segment)
-    → Personalized Card Generation
-    → Timestamp-synced playback UI
+server.py          — Flask app (run this)
+pipeline.py        — Whisper transcription + parallel LLM trigger detection
+triggers.py        — 4 prompt templates
+templates/
+  index.html       — Onboarding page
+  session.html     — Session/processing page
 ```
 
 ## License
@@ -62,7 +59,6 @@ MIT
 ## Built With
 
 - AMD Instinct MI300X (192 GB HBM3)
-- AMD Developer Cloud
-- ROCm (open-source GPU computing)
+- AMD Developer Cloud + ROCm
 - Qwen3 (Alibaba Cloud)
 - vLLM inference engine
