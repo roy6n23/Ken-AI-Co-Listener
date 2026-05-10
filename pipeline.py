@@ -7,7 +7,6 @@ from openai import OpenAI
 from faster_whisper import WhisperModel
 
 from triggers import TRIGGER_PROMPTS
-from profiles import PROFILES
 
 AMD_ENDPOINT = os.environ.get("AMD_ENDPOINT", "http://134.199.198.41:8000/v1")
 MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen3-14B")
@@ -128,17 +127,17 @@ def run_pipeline(audio_path: str, profile: dict, max_workers: int = 8) -> dict:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python pipeline.py <audio_file> [profile_name]")
-        print("  profile_name: user_a or user_b (default: user_a)")
+        print("Usage: python pipeline.py <audio_file> [situation]")
         sys.exit(1)
 
     audio_file = sys.argv[1]
-    profile_name = sys.argv[2] if len(sys.argv) > 2 else "user_a"
-    profile = PROFILES.get(profile_name)
-
-    if not profile:
-        print(f"Unknown profile: {profile_name}. Choose from: {list(PROFILES.keys())}")
-        sys.exit(1)
+    situation = sys.argv[2] if len(sys.argv) > 2 else "General professional context"
+    profile = {
+        "name": "User",
+        "situation": situation,
+        "knowledge_level": "intermediate",
+        "concerns": [situation],
+    }
 
     result = run_pipeline(audio_file, profile)
 
