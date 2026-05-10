@@ -1,0 +1,295 @@
+/* Lexis Design System */
+
+:root {
+  /* Typography - Premium system stack */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro Display', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+
+  /* Refined Color Palette */
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+
+  /* Accent (desaturated teal) */
+  --accent-50: #f0fdfa;
+  --accent-100: #ccfbf1;
+  --accent-500: #14b8a6;
+  --accent-600: #0d9488;
+  --accent-700: #0f766e;
+
+  /* Semantic Colors (desaturated) */
+  --amber-50: #fffbeb;
+  --amber-500: #d97706;
+  --amber-600: #b45309;
+
+  --rose-50: #fff1f2;
+  --rose-500: #e11d48;
+  --rose-600: #be123c;
+
+  --emerald-50: #ecfdf5;
+  --emerald-500: #10b981;
+  --emerald-600: #059669;
+
+  --blue-50: #eff6ff;
+  --blue-500: #3b82f6;
+  --blue-600: #2563eb;
+
+  /* Shadows with tint */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.1), 0 1px 2px -1px rgba(15, 23, 42, 0.1);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.1);
+
+  /* Spring transitions */
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--slate-50);
+  color: var(--slate-900);
+}
+
+/* Typography Scale */
+.lexis-hero-title {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.lexis-subtitle {
+  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  font-weight: 400;
+  color: var(--slate-600);
+  line-height: 1.5;
+  max-width: 65ch;
+}
+
+.lexis-section-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Card System */
+.lexis-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--slate-200);
+  transition: all 0.3s var(--ease-spring);
+  display: none;
+  animation: slideIn 0.4s var(--ease-spring);
+}
+
+.lexis-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.lexis-card[data-trigger="jargon"] {
+  border-left: 3px solid var(--amber-500);
+  background: linear-gradient(to right, var(--amber-50) 0%, white 8%);
+}
+
+.lexis-card[data-trigger="impact"] {
+  border-left: 3px solid var(--rose-500);
+  background: linear-gradient(to right, var(--rose-50) 0%, white 8%);
+}
+
+.lexis-card[data-trigger="question"] {
+  border-left: 3px solid var(--emerald-500);
+  background: linear-gradient(to right, var(--emerald-50) 0%, white 8%);
+}
+
+.lexis-card[data-trigger="commitment"] {
+  border-left: 3px solid var(--blue-500);
+  background: linear-gradient(to right, var(--blue-50) 0%, white 8%);
+}
+
+/* Filter Pills */
+.lexis-filter {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--slate-300);
+  background: white;
+  color: var(--slate-700);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-spring);
+  outline: none;
+}
+
+.lexis-filter:hover {
+  border-color: var(--slate-400);
+  background: var(--slate-50);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.lexis-filter:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.lexis-filter.active {
+  background: var(--slate-900);
+  color: white;
+  border-color: var(--slate-900);
+}
+
+.lexis-filter[data-filter="jargon"].active {
+  background: var(--amber-500);
+  border-color: var(--amber-600);
+  color: white;
+}
+
+.lexis-filter[data-filter="impact"].active {
+  background: var(--rose-500);
+  border-color: var(--rose-600);
+  color: white;
+}
+
+.lexis-filter[data-filter="question"].active {
+  background: var(--emerald-500);
+  border-color: var(--emerald-600);
+  color: white;
+}
+
+.lexis-filter[data-filter="commitment"].active {
+  background: var(--blue-500);
+  border-color: var(--blue-600);
+  color: white;
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Badge */
+.lexis-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.lexis-badge-amber {
+  background: var(--amber-500);
+  color: white;
+}
+
+.lexis-badge-rose {
+  background: var(--rose-500);
+  color: white;
+}
+
+.lexis-badge-emerald {
+  background: var(--emerald-500);
+  color: white;
+}
+
+.lexis-badge-blue {
+  background: var(--blue-500);
+  color: white;
+}
+
+/* Monospace for numbers */
+.lexis-time {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--slate-500);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Refined card content */
+.lexis-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.lexis-card-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--slate-900);
+  letter-spacing: -0.01em;
+}
+
+.lexis-card-summary {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--slate-800);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.lexis-card-detail {
+  font-size: 0.875rem;
+  color: var(--slate-600);
+  line-height: 1.6;
+}
+
+.lexis-card-action {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--slate-100);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: var(--slate-700);
+  border-left: 2px solid var(--accent-500);
+}
+
+/* Question card specific */
+.lexis-question-quote {
+  font-size: 0.875rem;
+  color: var(--slate-500);
+  font-style: italic;
+  margin-bottom: 8px;
+}
+
+.lexis-question-suggested {
+  padding: 10px 12px;
+  background: var(--emerald-50);
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--emerald-900);
+  margin: 8px 0;
+}
