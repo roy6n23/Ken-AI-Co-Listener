@@ -547,14 +547,29 @@
   let totalDuration = 0;
   let doneIds = new Set();
   let videoEl = null;
+  let isProcessed = false;
   let profileCat = sessionStorage.getItem('profileCat') || 'legal';
   let profileText = sessionStorage.getItem('profileText') || '';
+  let profileSummary = sessionStorage.getItem('profileSummary') || '';
+  let profileKeywords = [];
+  try { profileKeywords = JSON.parse(sessionStorage.getItem('profileKeywords') || '[]'); } catch(e) {}
+
   // Escape for safe HTML injection
-  let profileTextSafe = profileText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  let profileTextSafe = (profileSummary || profileText).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  let keywordsHtml = profileKeywords.length > 0
+    ? profileKeywords.map(k => '<span style="display:inline-block;padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:500;margin-right:6px;margin-top:6px;">' + k.replace(/</g,'&lt;') + '</span>').join('')
+    : '';
 
   function fmtTime(s) {
+    if (!s || isNaN(s)) return '0:00';
     const m = Math.floor(s/60), r = Math.floor(s%60);
     return m + ':' + r.toString().padStart(2,'0');
+  }
+
+  // Convert **bold** markdown to <strong> tags
+  function md(text) {
+    if (!text) return '';
+    return text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   }
 
   function renderCard(c, idx) {
@@ -564,17 +579,21 @@
     const ts = c.timestamp;
 
     if (c.trigger === 'question') {
+      const qTitle = c.data?.question?.title || 'Better question';
+      const qVague = c.vague || c.data?.question?.vague_phrase || '';
+      const qSuggested = c.suggested || c.data?.question?.suggested_question || '';
+      const qDetail = c.detail || c.data?.question?.why_it_matters || '';
       return `<div class="card${doneClass}" data-trigger="${c.trigger}" data-idx="${idx}">
         <div class="card-head">
           <div style="display:flex;align-items:center;gap:8px;flex:1;">
             <span class="badge" data-trigger="${c.trigger}">${LABELS[c.trigger]}</span>
-            <span class="card-title">Better question</span>
+            <span class="card-title">${md(qTitle)}</span>
           </div>
           <span class="card-time" data-jump="${ts}">${fmtTime(ts)}</span>
         </div>
-        <div class="quote">"${c.vague || c.data?.question?.vague_phrase || ''}"</div>
-        <div class="suggested">"${c.suggested || c.data?.question?.suggested_question || ''}"</div>
-        <div class="card-detail">${c.detail || c.data?.question?.why_it_matters || ''}</div>
+        <div class="quote">"${md(qVague)}"</div>
+        <div class="suggested">"${md(qSuggested)}"</div>
+        <div class="card-detail">${md(qDetail)}</div>
       </div>`;
     }
 
@@ -592,9 +611,9 @@
               ${itemChecked ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>' : ''}
             </button>
             <div class="todo-body">
-              <div class="todo-title">${item.title || ''}${item.actionable ? '<span class="todo-flag">action</span>' : ''}</div>
-              <div class="card-summary">${item.summary || ''}</div>
-              <div class="card-detail">${item.detail || ''} <span class="todo-time" data-jump="${ts}">↳ ${fmtTime(ts)}</span></div>
+              <div class="todo-title">${md(item.title || '')}${item.actionable ? '<span class="todo-flag">action</span>' : ''}</div>
+              <div class="card-summary">${md(item.summary || '')}</div>
+              <div class="card-detail">${md(item.detail || '')} <span class="todo-time" data-jump="${ts}">↳ ${fmtTime(ts)}</span></div>
             </div>
           </div>
         </div>`;
@@ -611,21 +630,49 @@
       <div class="card-head">
         <div style="display:flex;align-items:center;gap:8px;flex:1;">
           <span class="badge" data-trigger="${c.trigger}">${LABELS[c.trigger]}</span>
-          <span class="card-title">${title}</span>
+          <span class="card-title">${md(title)}</span>
         </div>
         <span class="card-time" data-jump="${ts}">${fmtTime(ts)}</span>
       </div>
-      ${summary ? `<div class="card-summary">${summary}</div>` : ''}
-      ${detail ? `<div class="card-detail">${detail}</div>` : ''}
-      ${action ? `<div class="card-action">${action}</div>` : ''}
+      ${summary ? `<div class="card-summary">${md(summary)}</div>` : ''}
+      ${detail ? `<div class="card-detail">${md(detail)}</div>` : ''}
+      ${action ? `<div class="card-action">${md(action)}</div>` : ''}
     </div>`;
   }
 
   function renderCards() {
     const container = document.getElementById('cards-scroll');
-    const visible = cards.filter(c =>
+
+    // Time-synced: cards only appear when video reaches their timestamp
+    const timeVisible = cards.filter(c =>
       (filter === 'all' || c.trigger === filter) && c.timestamp <= currentTime
     );
+
+    // Split into tracked (accumulates) and non-tracked (max 3 per type, newest first)
+    const tracked = timeVisible.filter(c => c.trigger === 'commitment');
+    const nonTracked = timeVisible.filter(c => c.trigger !== 'commitment');
+
+    // For non-tracked: group by trigger type, keep only latest 3 per type
+    const byType = {};
+    nonTracked.forEach(c => {
+      if (!byType[c.trigger]) byType[c.trigger] = [];
+      byType[c.trigger].push(c);
+    });
+    let displayNonTracked = [];
+    Object.values(byType).forEach(group => {
+      // Sort by timestamp descending (newest first), take max 3
+      const sorted = group.sort((a, b) => b.timestamp - a.timestamp).slice(0, 3);
+      displayNonTracked.push(...sorted);
+    });
+    // Sort all non-tracked by timestamp descending (newest on top)
+    displayNonTracked.sort((a, b) => b.timestamp - a.timestamp);
+
+    // Tracked: sort by timestamp ascending (oldest first, newest at bottom — accumulates)
+    tracked.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Combine: non-tracked on top, tracked below
+    const visible = [...displayNonTracked, ...tracked];
+
     if (visible.length === 0) {
       container.innerHTML = `<div style="padding:40px 18px;text-align:center;color:var(--ink-3);font-size:13.5px;">
         <div style="font-family:var(--font-serif);font-style:italic;font-size:32px;color:var(--ink-4);margin-bottom:8px;">—</div>
@@ -728,6 +775,7 @@
                 <div class="row-label">Your situation</div>
                 <div class="row-value" id="situation-summary" style="margin-top:6px">${profileTextSafe || 'No context provided.'}</div>
               </div>
+              ${keywordsHtml ? '<div><div class="row-label">Listening for</div><div style="margin-top:6px;">' + keywordsHtml + '</div></div>' : ''}
               <div class="actions">
                 <button class="btn-ghost" onclick="window.location.href='/'">Edit profile</button>
                 <button class="btn-solid" id="process-btn" disabled>Process <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg></button>
@@ -790,47 +838,23 @@
     let uploadedFile = null;
 
     dropzone.addEventListener('click', (e) => {
-      if (uploadedFile) return; // Don't re-open file picker after upload
+      if (uploadedFile) return;
       videoInput.click();
     });
     videoInput.addEventListener('change', (e) => {
       uploadedFile = e.target.files[0];
       if (!uploadedFile) return;
 
-      // Show video in the video-stage panel (not in dropzone)
-      const videoStage = document.getElementById('video-stage');
-      videoStage.innerHTML = `<video id="main-video" controls style="width:100%;height:100%;object-fit:contain;"></video>`;
-      const vid = document.getElementById('main-video');
-      vid.src = URL.createObjectURL(uploadedFile);
-      videoEl = vid;
-
-      // Update dropzone to show uploaded state
+      // Only update dropzone — do NOT show video in Playback yet
       dropzone.classList.add('has-video');
       const fname = uploadedFile.name.replace(/</g, '&lt;');
-      dropzone.innerHTML = '<div style="padding:20px;text-align:center;">' +
+      dropzone.innerHTML = '<div style="padding:28px;text-align:center;">' +
+        '<div style="font-family:var(--font-serif);font-style:italic;font-size:28px;color:var(--ink-4);margin-bottom:8px;">✓</div>' +
         '<div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-2);margin-bottom:4px;">' + fname + '</div>' +
         '<div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-3);">Ready to process</div></div>';
 
       processBtn.disabled = false;
       document.getElementById('file-meta').textContent = uploadedFile.name;
-
-      // Sync playback with transport bar + card rendering
-      vid.addEventListener('timeupdate', () => {
-        currentTime = vid.currentTime;
-        totalDuration = vid.duration || 1;
-        const pct = (currentTime / totalDuration) * 100;
-        document.getElementById('scrub-fill').style.width = pct + '%';
-        document.getElementById('scrub-head').style.left = pct + '%';
-        document.getElementById('timecode').innerHTML =
-          fmtTime(currentTime) + '<span class="sep">/</span>' + fmtTime(totalDuration);
-        renderCards();
-      });
-      vid.addEventListener('play', () => {
-        playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-      });
-      vid.addEventListener('pause', () => {
-        playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
-      });
     });
 
     // Play button with icon toggle
@@ -868,40 +892,43 @@
         const resp = await fetch('/process', { method: 'POST', body: formData });
         const result = await resp.json();
         cards = result.cards || [];
-        totalDuration = videoEl ? videoEl.duration : 300;
         document.getElementById('debug-json').textContent = JSON.stringify(result, null, 2);
 
-        // Update situation summary from LLM
-        if (result.summary) {
-          const el = document.getElementById('situation-summary');
-          if (el) el.innerHTML = '<em>' + result.summary + '</em>';
-        }
+        // NOW show video in Playback panel
+        const videoStage = document.getElementById('video-stage');
+        videoStage.innerHTML = '<video id="main-video" controls style="width:100%;height:100%;object-fit:contain;"></video>';
+        const vid = document.getElementById('main-video');
+        vid.src = URL.createObjectURL(uploadedFile);
+        videoEl = vid;
 
-        // Render scrub marks on the timeline
-        renderScrubMarks();
+        vid.addEventListener('loadedmetadata', () => {
+          totalDuration = vid.duration || 1;
+          renderScrubMarks();
+          renderFilters();
+          renderCards();
+        });
 
-        // Show all cards immediately (user can then replay to see them appear one by one)
-        currentTime = totalDuration;
+        vid.addEventListener('timeupdate', () => {
+          currentTime = vid.currentTime;
+          totalDuration = vid.duration || 1;
+          const pct = (currentTime / totalDuration) * 100;
+          document.getElementById('scrub-fill').style.width = pct + '%';
+          document.getElementById('scrub-head').style.left = pct + '%';
+          document.getElementById('timecode').innerHTML =
+            fmtTime(currentTime) + '<span class="sep">/</span>' + fmtTime(totalDuration);
+          renderCards();
+        });
+        vid.addEventListener('play', () => {
+          playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+        });
+        vid.addEventListener('pause', () => {
+          playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+        });
+
+        isProcessed = true;
+        processBtn.innerHTML = '▶ Play to begin';
         renderFilters();
         renderCards();
-
-        // Reset to beginning for playback
-        if (videoEl) videoEl.currentTime = 0;
-        currentTime = 0;
-        renderCards();
-
-        processBtn.innerHTML = 'Done ✓';
-        processBtn.disabled = false;
-
-        // Now switch to time-synced mode: cards show as video plays
-        if (videoEl) {
-          videoEl.addEventListener('play', () => {
-            playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-          });
-          videoEl.addEventListener('pause', () => {
-            playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
-          });
-        }
       } catch(err) {
         processBtn.innerHTML = 'Error — retry';
         processBtn.disabled = false;

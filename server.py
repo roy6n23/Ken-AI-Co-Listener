@@ -16,6 +16,52 @@ def index():
 def session():
     return render_template('session.html')
 
+@app.route('/summarize', methods=['POST'])
+def summarize():
+    data = request.get_json()
+    text = data.get('text', '')
+    category = data.get('category', 'legal')
+
+    if not text.strip():
+        return jsonify({'summary': '', 'keywords': []})
+
+    try:
+        from openai import OpenAI
+        endpoint = os.environ.get("AMD_ENDPOINT", "http://134.199.198.41:8000/v1")
+        model_name = os.environ.get("MODEL_NAME", "Qwen/Qwen3-14B")
+        client = OpenAI(base_url=endpoint, api_key="not-required")
+
+        prompt = f"""You are Ken, an AI co-listener. A user is about to enter a {category} consultation.
+
+Their input: "{text}"
+
+Return JSON with:
+1. "summary": A 2-3 sentence summary of their situation (concise, factual)
+2. "keywords": An array of 3-5 key topics/concerns to listen for during the conversation
+
+Return ONLY valid JSON, no other text."""
+
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.3,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+        content = response.choices[0].message.content.strip()
+        if "</think>" in content:
+            content = content.split("</think>")[-1].strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+        import json as json_mod
+        result = json_mod.loads(content)
+        return jsonify(result)
+    except Exception as e:
+        print(f"Summarize error: {e}")
+        return jsonify({'summary': text[:200], 'keywords': []})
+
+
 @app.route('/transcribe', methods=['POST'])
 def transcribe():
     if 'audio' not in request.files:

@@ -74,7 +74,7 @@ def run_trigger(trigger_name: str, prompt_template: str, segment: dict, profile:
         if result.get("triggered"):
             return {
                 "trigger": trigger_name,
-                "timestamp": segment["start"],
+                "timestamp": segment["end"],
                 "end": segment["end"],
                 "segment_text": segment["text"],
                 "data": result,

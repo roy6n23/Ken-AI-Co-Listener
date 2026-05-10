@@ -1,471 +1,304 @@
 import gradio as gr
 import json
-import os
-import tempfile
-from pathlib import Path
 from pipeline import run_pipeline
-from profiles import PROFILES
-
-CARD_COLORS = {
-    "jargon": ("#FEF3C7", "#D97706", "Jargon"),
-    "impact": ("#FEE2E2", "#DC2626", "Impact Alert"),
-    "question": ("#D1FAE5", "#059669", "Ask This"),
-    "commitment": ("#DBEAFE", "#2563EB", "Commitment"),
-}
-
 
 def format_card_html(card: dict) -> str:
     trigger = card["trigger"]
-    label_map = {"jargon": "Jargon", "impact": "Impact", "question": "Ask This", "commitment": "Tracked"}
-    badge_class_map = {"jargon": "amber", "impact": "rose", "question": "emerald", "commitment": "blue"}
+    labels = {"jargon": "Jargon", "impact": "Impact", "question": "Ask This", "commitment": "Tracked"}
+    badge_colors = {"jargon": "#d97706", "impact": "#e11d48", "question": "#10b981", "commitment": "#3b82f6"}
 
-    label = label_map.get(trigger, "Info")
-    badge_class = badge_class_map.get(trigger, "blue")
-    timestamp = card["timestamp"]
-    minutes = int(timestamp // 60)
-    seconds = int(timestamp % 60)
-
+    label = labels.get(trigger, "Info")
+    color = badge_colors.get(trigger, "#666")
+    ts = card["timestamp"]
+    mins, secs = int(ts // 60), int(ts % 60)
     data = card.get("data", {})
-    title = ""
-    content_html = ""
 
+    title, content = "", ""
     if trigger == "jargon":
         for item in data.get("cards", []):
-            title = item.get("title", item.get("term", ""))
-            summary = item.get("summary", item.get("definition", ""))
-            detail = item.get("detail", item.get("relevance", ""))
-            content_html += f"""
-            <div class="lexis-card-summary">{summary}</div>
-            <div class="lexis-card-detail">{detail}</div>"""
+            title = item.get("title", "")
+            content += f"<div style='margin-bottom:8px;'>{item.get('summary', '')}</div>"
     elif trigger == "impact":
         impact = data.get("impact", {})
         if impact:
             title = impact.get("title", "")
-            summary = impact.get("summary", impact.get("what", ""))
-            detail = impact.get("detail", impact.get("how_it_affects_you", ""))
-            action = impact.get("action", impact.get("suggested_action", ""))
-            content_html = f"""
-            <div class="lexis-card-summary">{summary}</div>
-            <div class="lexis-card-detail">{detail}</div>"""
-            if action:
-                content_html += f"""<div class="lexis-card-action">→ {action}</div>"""
+            content = f"<div>{impact.get('summary', '')}</div>"
     elif trigger == "question":
         q = data.get("question", {})
         if q:
-            title = q.get("title", "Ask This")
-            vague = q.get("vague_phrase", "")
-            suggested = q.get("suggested_question", "")
-            why = q.get("why_it_matters", q.get("why_ask", ""))
-            content_html = f"""
-            <div class="lexis-question-quote">Speaker said: "{vague}"</div>
-            <div class="lexis-question-suggested">"{suggested}"</div>
-            <div class="lexis-card-detail">{why}</div>"""
+            title = q.get("title", "")
+            content = f"<div style='font-style:italic;margin-bottom:8px;'>\"{q.get('suggested_question', '')}\"</div>"
     elif trigger == "commitment":
         items = data.get("commitments", [])
-        if items:
-            title = items[0].get("title", "Tracked")
+        if items: title = items[0].get("title", "")
         for item in items:
-            actionable = item.get("actionable", False)
-            badge_text = "Action needed" if actionable else "Context"
-            content_html += f"""
-            <div style="margin-bottom:8px;">
-                <span class="lexis-badge lexis-badge-{badge_class}" style="font-size:0.7rem;padding:2px 6px;">{badge_text}</span>
-                <span class="lexis-card-summary" style="display:inline;margin-left:6px;">{item.get('summary', item.get('content', ''))}</span>
-                <div class="lexis-card-detail" style="margin-top:4px;">{item.get('detail', '')}</div>
-            </div>"""
+            content += f"<div style='margin-bottom:6px;'>{item.get('summary', '')}</div>"
 
-    if not title:
-        title = label
-
-    return f"""
-    <div class="card lexis-card" data-timestamp="{timestamp}" data-trigger="{trigger}">
-        <div class="lexis-card-header">
-            <div>
-                <span class="lexis-badge lexis-badge-{badge_class}">{label}</span>
-                <span class="lexis-card-title" style="margin-left:8px;">{title}</span>
-            </div>
-            <span class="lexis-time">{minutes}:{seconds:02d}</span>
+    return f"""<div class="lexis-card" data-timestamp="{ts}" data-trigger="{trigger}" style="display:none;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+            <span style="background:{color};color:white;padding:2px 8px;border-radius:6px;font-size:0.75rem;font-weight:600;">{label}</span>
+            <span style="font-family:monospace;color:#666;font-size:0.85rem;">{mins}:{secs:02d}</span>
         </div>
-        <div>{content_html}</div>
+        <div style="font-weight:600;margin-bottom:8px;">{title}</div>
+        <div style="color:#666;line-height:1.6;">{content}</div>
     </div>"""
 
-
-INLINE_CSS = """
-<style>
-:root {
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'Monaco', monospace;
-  --slate-50: #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0; --slate-300: #cbd5e1;
-  --slate-400: #94a3b8; --slate-500: #64748b; --slate-600: #475569; --slate-700: #334155;
-  --slate-800: #1e293b; --slate-900: #0f172a;
-  --amber-50: #fffbeb; --amber-500: #d97706; --rose-50: #fff1f2; --rose-500: #e11d48;
-  --emerald-50: #ecfdf5; --emerald-500: #10b981; --blue-50: #eff6ff; --blue-500: #3b82f6;
-  --shadow: 0 1px 3px 0 rgba(15,23,42,0.1), 0 1px 2px -1px rgba(15,23,42,0.1);
-  --shadow-md: 0 4px 6px -1px rgba(15,23,42,0.1), 0 2px 4px -2px rgba(15,23,42,0.1);
-  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
-}
-* { font-family: var(--font-sans); }
-.lexis-card { background: white; border-radius: 12px; padding: 16px 20px; margin-bottom: 12px;
-  box-shadow: var(--shadow); border: 1px solid var(--slate-200); transition: all 0.3s var(--ease-spring);
-  display: none; animation: slideIn 0.4s var(--ease-spring); }
-.lexis-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
-.lexis-card[data-trigger="jargon"] { border-left: 3px solid var(--amber-500);
-  background: linear-gradient(to right, var(--amber-50) 0%, white 8%); }
-.lexis-card[data-trigger="impact"] { border-left: 3px solid var(--rose-500);
-  background: linear-gradient(to right, var(--rose-50) 0%, white 8%); }
-.lexis-card[data-trigger="question"] { border-left: 3px solid var(--emerald-500);
-  background: linear-gradient(to right, var(--emerald-50) 0%, white 8%); }
-.lexis-card[data-trigger="commitment"] { border-left: 3px solid var(--blue-500);
-  background: linear-gradient(to right, var(--blue-50) 0%, white 8%); }
-.lexis-filter { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--slate-300);
-  background: white; color: var(--slate-700); font-size: 0.875rem; font-weight: 500; cursor: pointer;
-  transition: all 0.2s var(--ease-spring); outline: none; }
-.lexis-filter:hover { border-color: var(--slate-400); background: var(--slate-50);
-  transform: translateY(-1px); box-shadow: var(--shadow); }
-.lexis-filter:active { transform: translateY(0) scale(0.98); }
-.lexis-filter.active { background: var(--slate-900); color: white; border-color: var(--slate-900); }
-.lexis-filter[data-filter="jargon"].active { background: var(--amber-500); border-color: var(--amber-500); }
-.lexis-filter[data-filter="impact"].active { background: var(--rose-500); border-color: var(--rose-500); }
-.lexis-filter[data-filter="question"].active { background: var(--emerald-500); border-color: var(--emerald-500); }
-.lexis-filter[data-filter="commitment"].active { background: var(--blue-500); border-color: var(--blue-500); }
-.lexis-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem;
-  font-weight: 600; text-transform: uppercase; letter-spacing: 0.025em; }
-.lexis-badge-amber { background: var(--amber-500); color: white; }
-.lexis-badge-rose { background: var(--rose-500); color: white; }
-.lexis-badge-emerald { background: var(--emerald-500); color: white; }
-.lexis-badge-blue { background: var(--blue-500); color: white; }
-.lexis-time { font-family: var(--font-mono); font-size: 0.8125rem; color: var(--slate-500);
-  font-variant-numeric: tabular-nums; }
-.lexis-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.lexis-card-title { font-weight: 600; font-size: 0.9375rem; color: var(--slate-900); letter-spacing: -0.01em; }
-.lexis-card-summary { font-size: 0.9375rem; font-weight: 500; color: var(--slate-800); line-height: 1.5; margin-bottom: 8px; }
-.lexis-card-detail { font-size: 0.875rem; color: var(--slate-600); line-height: 1.6; }
-.lexis-card-action { margin-top: 10px; padding: 8px 12px; background: var(--slate-100);
-  border-radius: 8px; font-size: 0.875rem; color: var(--slate-700); border-left: 2px solid var(--emerald-500); }
-.lexis-question-quote { font-size: 0.875rem; color: var(--slate-500); font-style: italic; margin-bottom: 8px; }
-.lexis-question-suggested { padding: 10px 12px; background: var(--emerald-50); border-radius: 8px;
-  font-size: 0.9375rem; font-weight: 500; color: var(--slate-900); margin: 8px 0; }
-.lexis-section-title { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; color: var(--slate-900); }
-.lexis-hero-title { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
-.lexis-subtitle { font-size: clamp(1rem, 2.5vw, 1.25rem); font-weight: 400; color: var(--slate-600); line-height: 1.5; max-width: 65ch; }
-@keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-</style>
-"""
-
-def build_synced_cards_html(cards: list) -> str:
-    """Build cards HTML with filter buttons. JS sync logic is in the global head script."""
-    cards_html = "\n".join(format_card_html(c) for c in cards)
+def build_cards_html(cards):
     total = len(cards)
+    counts = {t: sum(1 for c in cards if c["trigger"] == t) for t in ["jargon", "impact", "question", "commitment"]}
+    cards_html = "\n".join(format_card_html(c) for c in cards)
 
-    jargon_count = sum(1 for c in cards if c["trigger"] == "jargon")
-    impact_count = sum(1 for c in cards if c["trigger"] == "impact")
-    question_count = sum(1 for c in cards if c["trigger"] == "question")
-    commitment_count = sum(1 for c in cards if c["trigger"] == "commitment")
-
-    return f"""
-    {INLINE_CSS}
-    <div id="lexis-cards-container">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <h3 class="lexis-section-title" style="margin:0;">Insights</h3>
-            <span id="card-count" class="lexis-time">(0/{total})</span>
+    return f"""<div id="cards-wrapper">
+        <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
+            <h3 style="margin:0;">Insights</h3>
+            <span id="card-count" style="font-family:monospace;">(0/{total})</span>
         </div>
-        <div id="lexis-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-            <button class="filter-btn lexis-filter active" data-filter="all">All ({total})</button>
-            <button class="filter-btn lexis-filter active" data-filter="jargon">Jargon ({jargon_count})</button>
-            <button class="filter-btn lexis-filter active" data-filter="impact">Impact ({impact_count})</button>
-            <button class="filter-btn lexis-filter active" data-filter="question">Questions ({question_count})</button>
-            <button class="filter-btn lexis-filter active" data-filter="commitment">Commitments ({commitment_count})</button>
+        <div id="filters" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+            <button class="filter-btn active" data-filter="all">All ({total})</button>
+            <button class="filter-btn active" data-filter="jargon">Jargon ({counts['jargon']})</button>
+            <button class="filter-btn active" data-filter="impact">Impact ({counts['impact']})</button>
+            <button class="filter-btn active" data-filter="question">Questions ({counts['question']})</button>
+            <button class="filter-btn active" data-filter="commitment">Tracked ({counts['commitment']})</button>
         </div>
-        <div id="lexis-status" style="font-size:0.875rem;color:var(--slate-500);margin-bottom:12px;">
-            Press play on the video. Cards appear as the conversation progresses.
-        </div>
-        <div id="lexis-cards" style="max-height:550px;overflow-y:auto;">
-            {cards_html}
-        </div>
-    </div>
-    """
+        <div id="cards-container" style="max-height:550px;overflow-y:auto;">{cards_html}</div>
+    </div>"""
 
-
-GLOBAL_JS = """
-<script>
-(function() {
-    let lastTime = -1;
-    let activeFilters = new Set(['jargon', 'impact', 'question', 'commitment']);
-
-    // Filter button click handler
-    document.addEventListener('click', function(e) {
-        const btn = e.target.closest('.filter-btn');
-        if (!btn) return;
-
-        const filter = btn.dataset.filter;
-        if (filter === 'all') {
-            // Toggle all
-            const allActive = activeFilters.size === 4;
-            if (allActive) {
-                activeFilters.clear();
-            } else {
-                activeFilters = new Set(['jargon', 'impact', 'question', 'commitment']);
-            }
-        } else {
-            if (activeFilters.has(filter)) {
-                activeFilters.delete(filter);
-            } else {
-                activeFilters.add(filter);
-            }
-        }
-
-        // Update button styles
-        document.querySelectorAll('.filter-btn').forEach(b => {
-            const f = b.dataset.filter;
-            if (f === 'all') {
-                b.classList.toggle('active', activeFilters.size === 4);
-                b.style.opacity = activeFilters.size === 4 ? '1' : '0.4';
-            } else {
-                const isActive = activeFilters.has(f);
-                b.classList.toggle('active', isActive);
-                b.style.opacity = isActive ? '1' : '0.4';
-            }
-        });
-
-        // Force re-render cards
-        lastTime = -1;
+SYNC_JS = """<script>
+(function(){
+let filters = new Set(['jargon','impact','question','commitment']);
+let lastTime = -1;
+document.addEventListener('click', e => {
+    const btn = e.target.closest('.filter-btn');
+    if(!btn) return;
+    const f = btn.dataset.filter;
+    if(f==='all') filters = filters.size===4 ? new Set() : new Set(['jargon','impact','question','commitment']);
+    else filters.has(f) ? filters.delete(f) : filters.add(f);
+    document.querySelectorAll('.filter-btn').forEach(b => {
+        if(b.dataset.filter==='all') b.classList.toggle('active', filters.size===4);
+        else b.classList.toggle('active', filters.has(b.dataset.filter));
     });
-
-    function tick() {
-        const cards = document.querySelectorAll('.card[data-timestamp]');
-        if (cards.length === 0) return;
-
-        const videos = document.querySelectorAll('video');
-        let activeVideo = null;
-        for (const v of videos) {
-            if (v.currentTime > 0 || !v.paused) {
-                activeVideo = v;
-                break;
-            }
+    lastTime = -1;
+});
+function tick(){
+    const cards = document.querySelectorAll('.lexis-card');
+    if(!cards.length) return;
+    const video = document.querySelector('video');
+    if(!video) return;
+    const t = video.currentTime;
+    if(t === lastTime) return;
+    lastTime = t;
+    let shown = 0;
+    cards.forEach(card => {
+        const ts = parseFloat(card.dataset.timestamp);
+        const trigger = card.dataset.trigger;
+        if(t >= ts && filters.has(trigger)){
+            card.style.display = 'block';
+            shown++;
+        } else {
+            card.style.display = 'none';
         }
-        if (!activeVideo && videos.length > 0) {
-            activeVideo = videos[videos.length - 1];
-        }
-        if (!activeVideo) return;
-
-        const t = activeVideo.currentTime;
-        if (t === lastTime) return;
-        lastTime = t;
-
-        let revealed = 0;
-        let filtered = 0;
-        const cardContainer = document.getElementById('lexis-cards');
-        cards.forEach(card => {
-            const ts = parseFloat(card.dataset.timestamp);
-            const trigger = card.dataset.trigger;
-            const passesFilter = activeFilters.has(trigger);
-            const passesTime = t >= ts;
-
-            if (passesTime && passesFilter) {
-                if (card.style.display === 'none') {
-                    card.style.display = 'block';
-                    card.style.animation = 'slideIn 0.4s ease-out';
-                    if (cardContainer) cardContainer.scrollTop = cardContainer.scrollHeight;
-                }
-                revealed++;
-            } else {
-                card.style.display = 'none';
-            }
-            if (passesTime) filtered++;
-        });
-
-        const countEl = document.getElementById('card-count');
-        const status = document.getElementById('lexis-status');
-        const total = cards.length;
-        if (countEl) countEl.textContent = `(${revealed}/${total})`;
-        if (status) {
-            const mins = Math.floor(t / 60);
-            const secs = Math.floor(t % 60).toString().padStart(2, '0');
-            status.textContent = `${mins}:${secs} | ${revealed} shown`;
-        }
-    }
-
-    setInterval(tick, 250);
+    });
+    const countEl = document.getElementById('card-count');
+    if(countEl) countEl.textContent = `(${shown}/${cards.length})`;
+}
+setInterval(tick, 250);
 })();
 </script>
-"""
+<style>
+.filter-btn { padding:6px 14px; border-radius:20px; border:1px solid #e2e8f0; background:white;
+    color:#666; font-size:0.875rem; cursor:pointer; transition:all 0.2s; }
+.filter-btn:hover { background:#f5f5f5; border-color:#999; }
+.filter-btn.active { background:#1a1a1a; color:white; border-color:#1a1a1a; }
+.lexis-card { background:white; padding:16px; margin-bottom:12px; border-radius:12px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.1); border-left:3px solid #3a4a32; }
+</style>"""
 
-
-def process_media_with_profile(media_file, profile_text):
-    if media_file is None:
-        return None, "<p style='color:red;'>Please upload a video.</p>", "{}"
-
-    # Build a custom profile from user's free-text input
+def process_media(media, text, cat):
+    if not media: return None, "<p style='color:red;'>Upload a video first.</p>", "{}"
     profile = {
         "name": "User",
-        "situation": profile_text if profile_text.strip() else "General professional seeking to understand the conversation.",
-        "knowledge_level": "beginner",
-        "concerns": [],
+        "situation": f"{cat}: {text}" if text else f"{cat} consultation",
+        "knowledge_level": "intermediate",
+        "concerns": [text] if text else []
     }
+    result = run_pipeline(media, profile)
+    return media, build_cards_html(result["cards"]), json.dumps(result, indent=2)
 
-    # Try to infer concerns from the text
-    text_lower = profile_text.lower()
-    if any(w in text_lower for w in ["h1b", "visa", "green card", "immigration", "i-140", "perm", "opt"]):
-        profile["knowledge_level"] = "intermediate" if any(w in text_lower for w in ["i-140", "priority date", "aos"]) else "beginner"
-    if any(w in text_lower for w in ["concern", "worry", "anxious", "afraid", "want to know"]):
-        profile["concerns"] = [profile_text.strip()]
-    else:
-        profile["concerns"] = [profile_text.strip()]
+CSS = """
+:root {
+    --bg: #f4ece0;
+    --bg-card: #fffdf8;
+    --ink: #1f1812;
+    --ink-2: #524539;
+    --ink-3: #93836f;
+    --line: #ebe0cc;
+    --accent: #3a4a32;
+    --radius: 22px;
+}
+.gradio-container { background: var(--bg) !important; font-family: 'Inter', sans-serif !important; }
+footer { display: none !important; }
 
-    result = run_pipeline(media_file, profile)
-    cards = result["cards"]
-    cards_html = build_synced_cards_html(cards)
+/* Paper grain */
+body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(26,24,20,0.025) 1px, transparent 1px);
+    background-size: 3px 3px; z-index: 0; mix-blend-mode: multiply;
+}
 
-    return media_file, cards_html, json.dumps(result, indent=2)
+/* Topbar */
+.topbar { display: flex !important; justify-content: space-between !important; align-items: center !important;
+    padding: 22px 32px !important; position: relative !important; z-index: 5 !important; }
+.brand { font-family: 'Instrument Serif', serif !important; font-size: 22px !important; color: var(--ink) !important;
+    display: inline-flex !important; align-items: center !important; gap: 8px !important; }
+.brand::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 
+/* Stage */
+.stage { min-height: calc(100vh - 80px) !important; display: flex !important; flex-direction: column !important;
+    align-items: center !important; padding: 6vh 24px 60px !important; position: relative !important; z-index: 1 !important; }
 
-def create_app():
-    with gr.Blocks(title="Lexis — AI Co-Listener") as app:
+/* Hero */
+.hero { text-align: center !important; margin-bottom: 38px !important; max-width: 720px !important; }
+.wordmark { font-family: 'Instrument Serif', serif !important; font-weight: 400 !important; font-style: italic !important;
+    font-size: clamp(64px, 11vw, 112px) !important; line-height: 0.95 !important; letter-spacing: -0.02em !important;
+    margin: 0 !important; color: var(--ink) !important; }
+.tagline { font-size: 18px !important; line-height: 1.5 !important; color: var(--ink-2) !important;
+    margin-top: 18px !important; max-width: 560px !important; margin-left: auto !important; margin-right: auto !important; }
 
-        # ============ PAGE 1: ONBOARDING ============
-        with gr.Column(visible=True) as onboarding_page:
-            gr.HTML(f"""
-            {INLINE_CSS}
-            <div style="text-align:center;padding:60px 20px 40px;max-width:800px;margin:0 auto;">
-                <h1 class="lexis-hero-title" style="margin-bottom:16px;">Lexis</h1>
-                <p class="lexis-subtitle" style="margin:0 auto 24px;">
-                    Your AI co-listener that gives <strong>explainable, personalized</strong> interventions during professional conversations.
-                </p>
-                <p style="font-size:0.9375rem;color:#64748b;max-width:560px;margin:0 auto;">
-                    Tell us about yourself so Lexis can tailor insights to <em>your</em> specific situation.
-                </p>
-            </div>
-            """)
+/* Profile chips */
+.chips { display: flex !important; flex-wrap: wrap !important; justify-content: center !important; gap: 8px !important;
+    max-width: 720px !important; margin: 0 auto 14px !important; }
+.chips button { padding: 9px 16px !important; background: rgba(255,255,255,0.55) !important; border: 1px solid var(--line) !important;
+    border-radius: 999px !important; font-size: 13.5px !important; font-weight: 500 !important; color: var(--ink-2) !important;
+    cursor: pointer !important; transition: all 0.18s cubic-bezier(.2,.8,.2,1) !important; backdrop-filter: blur(6px) !important; }
+.chips button:hover { background: #fff !important; border-color: #c3b5a0 !important; color: var(--ink) !important;
+    transform: translateY(-1px) !important; }
+.chips button.selected { background: var(--ink) !important; color: #f7f4ec !important; border-color: var(--ink) !important;
+    box-shadow: 0 6px 18px -10px rgba(0,0,0,.5) !important; }
 
-            with gr.Column(elem_classes=["onboarding-form"]):
-                profile_text = gr.Textbox(
-                    label="Tell us about your situation",
-                    placeholder="Example: I'm on H-1B at a tech company, I-140 approved in 2021 with priority date March 2021. I'm considering switching employers and want to understand how the new $100K fee might affect me. I'm also planning to visit my parents in China.",
-                    lines=5,
-                    max_lines=10,
-                )
+/* Input card */
+.input-card { background: var(--bg-card) !important; border: 1px solid var(--line) !important;
+    border-radius: var(--radius) !important; box-shadow: 0 1px 0 rgba(26,24,20,0.04), 0 18px 40px -22px rgba(26,24,20,0.18) !important;
+    padding: 22px !important; max-width: 720px !important; margin: 0 auto !important; }
+.input-card textarea { border: none !important; background: transparent !important; font-size: 16px !important;
+    line-height: 1.55 !important; color: var(--ink) !important; padding: 4px !important; resize: none !important; }
+.input-card textarea::placeholder { color: #c3b5a0 !important; }
 
-                with gr.Row():
-                    profile_file = gr.File(
-                        label="Upload supporting docs (optional)",
-                        file_types=[".pdf", ".txt", ".json"],
-                        type="filepath",
-                    )
-                    voice_input = gr.Audio(
-                        label="Or describe by voice",
-                        type="filepath",
-                        sources=["microphone"],
-                    )
+/* Action buttons */
+.actions { display: flex !important; justify-content: space-between !important; align-items: center !important;
+    padding-top: 10px !important; margin-top: 6px !important; border-top: 1px solid var(--line) !important; }
+.iconbtn { width: 38px !important; height: 38px !important; background: #fff !important; border: 1px solid var(--line) !important;
+    border-radius: 12px !important; color: var(--ink-2) !important; display: inline-flex !important;
+    align-items: center !important; justify-content: center !important; cursor: pointer !important; }
+.iconbtn:hover { border-color: var(--ink-3) !important; color: var(--ink) !important; background: #fefdfa !important; }
+.submitbtn { height: 38px !important; padding: 0 18px !important; background: var(--ink) !important; color: #f7f4ec !important;
+    border: none !important; border-radius: 999px !important; font-size: 13.5px !important; font-weight: 500 !important;
+    cursor: pointer !important; margin-left: 4px !important; }
+.submitbtn:hover { background: #000 !important; }
 
-                proceed_btn = gr.Button(
-                    "Continue →",
-                    variant="primary",
-                    size="lg",
-                )
+/* Footer */
+.foot { margin-top: 64px !important; text-align: center !important; color: var(--ink-3) !important;
+    font-size: 13.5px !important; max-width: 540px !important; line-height: 1.7 !important; }
 
-        # ============ PAGE 2: MAIN PROCESSING ============
-        with gr.Column(visible=False) as main_page:
-            gr.Markdown("## Lexis — Co-Listening Session")
+/* Hide labels */
+.stage label { display: none !important; }
+"""
 
-            with gr.Accordion("Upload & Configure", open=True) as upload_accordion:
-                with gr.Row():
-                    media_input = gr.Video(label="Upload Conversation Video")
-                    with gr.Column():
-                        profile_display = gr.Textbox(
-                            label="Your Profile",
-                            interactive=False,
-                            lines=3,
-                        )
-                        process_btn = gr.Button("Process Conversation", variant="primary", size="lg")
-                        back_btn = gr.Button("← Edit Profile", variant="secondary", size="sm")
+with gr.Blocks(title="Lexis", css=CSS, head=SYNC_JS) as app:
 
+    # Onboarding page
+    with gr.Column(visible=True, elem_classes=["stage"]) as onboarding:
+        gr.HTML('<div class="topbar"><div class="brand">Lexis</div><a href="#" style="font-size:13px;color:#524539;text-decoration:none;">Sign in</a></div>')
+
+        gr.HTML('''<div class="hero">
+            <h1 class="wordmark">Lexis<span style="color:#3a4a32;">.</span></h1>
+            <p class="tagline">Tell us a little about your situation.<br/>
+            We'll listen along and surface what <em style="font-family:'Instrument Serif',serif;font-size:1.12em;">actually</em> matters — in real time.</p>
+        </div>''')
+
+        with gr.Row(elem_classes=["chips"]):
+            legal_btn = gr.Button("§ Legal", elem_classes=["selected"])
+            medical_btn = gr.Button("℞ Medical")
+            immigration_btn = gr.Button("✦ Immigration")
+            career_btn = gr.Button("¶ Career")
+            add_btn = gr.Button("+", elem_classes=["chip-add"])
+
+        with gr.Column(elem_classes=["input-card"]):
+            profile_input = gr.Textbox(
+                placeholder="Tell me about the case. Counterparty, the contract you're reviewing, what's at stake…",
+                lines=3, show_label=False, container=False
+            )
+
+            with gr.Row(elem_classes=["actions"]):
+                gr.HTML('<div style="font-family:monospace;font-size:11px;color:#93836f;">⌘ ↵ to begin</div>')
+                voice_btn = gr.Button("🎤", elem_classes=["iconbtn"], scale=0)
+                file_btn = gr.Button("📎", elem_classes=["iconbtn"], scale=0)
+                continue_btn = gr.Button("Begin →", elem_classes=["submitbtn"], scale=0)
+
+        gr.HTML('<div class="foot">Don\'t take the shortcut. Lexis doesn\'t summarize.<br/>We show you where to look instead.</div>')
+
+        profile_cat = gr.State("Legal")
+        voice_input = gr.Audio(sources=["microphone"], type="filepath", visible=False)
+        file_input = gr.File(visible=False)
+
+    # Main page
+    with gr.Column(visible=False) as main_page:
+        gr.Markdown("## Lexis — Co-Listening Session")
+        with gr.Accordion("Upload", open=True):
             with gr.Row():
-                with gr.Column(scale=1):
-                    video_output = gr.Video(label="Playback", interactive=False)
-                with gr.Column(scale=1):
-                    output_html = gr.HTML(label="Insights")
+                media_input = gr.Video(label="Upload Video")
+                with gr.Column():
+                    profile_display = gr.Textbox(label="Profile", interactive=False, lines=2)
+                    process_btn = gr.Button("Process", variant="primary")
+                    back_btn = gr.Button("← Back", variant="secondary")
 
-            with gr.Accordion("Raw JSON Output", open=False):
-                output_json = gr.Code(language="json", label="Pipeline Output")
+        with gr.Row():
+            video_output = gr.Video(label="Playback")
+            output_html = gr.HTML()
 
-        # ============ STATE ============
-        profile_state = gr.State("")
+        with gr.Accordion("Debug", open=False):
+            output_json = gr.Code(language="json")
 
-        # ============ ACTIONS ============
+    profile_state = gr.State("")
 
-        def transcribe_voice(audio_path):
-            """Convert voice input to text and append to profile textbox."""
-            if audio_path is None:
-                return gr.Textbox()
+    # Chip selection
+    def sel_legal(): return "Legal", gr.Button(elem_classes=["selected"]), gr.Button(), gr.Button(), gr.Button()
+    def sel_medical(): return "Medical", gr.Button(), gr.Button(elem_classes=["selected"]), gr.Button(), gr.Button()
+    def sel_immigration(): return "Immigration", gr.Button(), gr.Button(), gr.Button(elem_classes=["selected"]), gr.Button()
+    def sel_career(): return "Career", gr.Button(), gr.Button(), gr.Button(), gr.Button(elem_classes=["selected"])
+
+    legal_btn.click(sel_legal, outputs=[profile_cat, legal_btn, medical_btn, immigration_btn, career_btn])
+    medical_btn.click(sel_medical, outputs=[profile_cat, legal_btn, medical_btn, immigration_btn, career_btn])
+    immigration_btn.click(sel_immigration, outputs=[profile_cat, legal_btn, medical_btn, immigration_btn, career_btn])
+    career_btn.click(sel_career, outputs=[profile_cat, legal_btn, medical_btn, immigration_btn, career_btn])
+
+    # Voice
+    def on_voice(audio):
+        if not audio: return ""
+        try:
             from faster_whisper import WhisperModel
             model = WhisperModel("base", device="cpu", compute_type="int8")
-            segments, _ = model.transcribe(audio_path, beam_size=3, language="en")
-            text = " ".join(seg.text.strip() for seg in segments)
-            return text
+            segments, _ = model.transcribe(audio, beam_size=3, language="en")
+            return " ".join(seg.text.strip() for seg in segments)
+        except: return ""
 
-        def on_voice_recorded(audio_path, current_text):
-            if audio_path is None:
-                return current_text
-            transcribed = transcribe_voice(audio_path)
-            if current_text.strip():
-                return current_text.strip() + "\n" + transcribed
-            return transcribed
+    voice_btn.click(lambda: gr.Audio(visible=True), outputs=[voice_input])
+    voice_input.change(on_voice, inputs=[voice_input], outputs=[profile_input])
 
-        def on_proceed(profile_text_val):
-            """Switch from onboarding to main page."""
-            return (
-                gr.Column(visible=False),  # hide onboarding
-                gr.Column(visible=True),   # show main
-                profile_text_val,          # store in state
-                profile_text_val,          # display in profile_display
-            )
+    file_btn.click(lambda: gr.File(visible=True), outputs=[file_input])
 
-        def on_back():
-            """Switch back to onboarding."""
-            return (
-                gr.Column(visible=True),   # show onboarding
-                gr.Column(visible=False),  # hide main
-            )
+    # Navigation
+    def on_proceed(text, cat):
+        full = f"{cat}: {text}" if text else f"{cat} consultation"
+        return gr.Column(visible=False), gr.Column(visible=True), full, full
 
-        def on_process(media_file, stored_profile):
-            video, html, json_out = process_media_with_profile(media_file, stored_profile)
-            return video, html, json_out, gr.Accordion(open=False)
+    continue_btn.click(on_proceed, inputs=[profile_input, profile_cat],
+                      outputs=[onboarding, main_page, profile_state, profile_display])
 
-        # Wire events
-        voice_input.change(
-            fn=on_voice_recorded,
-            inputs=[voice_input, profile_text],
-            outputs=[profile_text],
-        )
+    back_btn.click(lambda: (gr.Column(visible=True), gr.Column(visible=False)),
+                  outputs=[onboarding, main_page])
 
-        proceed_btn.click(
-            fn=on_proceed,
-            inputs=[profile_text],
-            outputs=[onboarding_page, main_page, profile_state, profile_display],
-        )
-
-        back_btn.click(
-            fn=on_back,
-            inputs=[],
-            outputs=[onboarding_page, main_page],
-        )
-
-        process_btn.click(
-            fn=on_process,
-            inputs=[media_input, profile_state],
-            outputs=[video_output, output_html, output_json, upload_accordion],
-        )
-
-    return app
-
+    process_btn.click(process_media, inputs=[media_input, profile_state, profile_cat],
+                     outputs=[video_output, output_html, output_json])
 
 if __name__ == "__main__":
-    app = create_app()
-    custom_theme = gr.themes.Soft(primary_hue="teal", secondary_hue="slate", neutral_hue="slate")
-    app.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
-        allowed_paths=["/"],
-        head=GLOBAL_JS,
-        theme=custom_theme,
-    )
+    app.launch(server_name="0.0.0.0", server_port=7860, share=True)

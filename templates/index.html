@@ -705,12 +705,31 @@
       e.target.value = '';
     });
 
-    // Submit
-    document.getElementById('submit-btn').addEventListener('click', () => {
+    // Submit — call LLM to summarize before navigating
+    document.getElementById('submit-btn').addEventListener('click', async () => {
       const text = document.getElementById('profile-input').value;
       if (!text.trim() && attachedFiles.length === 0) return;
+
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      btn.innerHTML = 'Preparing…';
+
       sessionStorage.setItem('profileCat', activeCat);
       sessionStorage.setItem('profileText', text);
+
+      try {
+        const resp = await fetch('/summarize', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ text, category: activeCat })
+        });
+        const data = await resp.json();
+        if (data.summary) sessionStorage.setItem('profileSummary', data.summary);
+        if (data.keywords) sessionStorage.setItem('profileKeywords', JSON.stringify(data.keywords));
+      } catch(e) {
+        console.error('Summarize failed, using raw text', e);
+      }
+
       window.location.href = '/session';
     });
 
