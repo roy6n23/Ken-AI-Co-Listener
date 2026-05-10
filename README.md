@@ -1,3 +1,12 @@
+---
+title: Ken AI Co-Listener
+emoji: 🎧
+colorFrom: yellow
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # Ken — AI Co-Listener for Professional Conversations
 
 An AI co-listener that gives explainable, personalized interventions during professional conversations — built on AMD ROCm.
