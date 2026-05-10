@@ -1,4 +1,4 @@
-# Lexis — Explainable AI Co-Listener for Professional Conversations
+# Ken — Explainable AI Co-Listener for Professional Conversations
 
 > An open-source, domain-aware AI co-listener that gives explainable, personalized interventions during professional conversations — built on AMD ROCm.
 
@@ -8,9 +8,9 @@ When you talk to professionals — lawyers, accountants, doctors — they speak 
 
 Existing solutions either summarize *after* it's too late (Otter, Fireflies) or intervene as a blackbox you can't predict (Hedy, Cluely).
 
-## How Lexis is Different
+## How Ken is Different
 
-Lexis intervenes through **4 explicit, explainable trigger types** — each tied to a real cognitive gap:
+Ken intervenes through **4 explicit, explainable trigger types** — each tied to a real cognitive gap:
 
 | Trigger | Detects | User's Gap |
 |---------|---------|-----------|
