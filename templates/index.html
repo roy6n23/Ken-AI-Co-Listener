@@ -490,6 +490,12 @@
 
   <script>
   let activeCat = 'legal';
+  let attachedFiles = [];
+  let isRecording = false;
+  let mediaRecorder = null;
+  let recordingTimer = null;
+  let recordingSeconds = 0;
+
   const placeholders = {
     legal: "Tell me about the case. Counterparty, the contract you're reviewing, what's at stake…",
     medical: "Describe the appointment. The condition, current meds, what your doctor mentioned last time…",
@@ -497,27 +503,143 @@
     career: "The role, the company, what you're negotiating, what you wish you'd asked last round…"
   };
 
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(0) + ' KB';
+    return (bytes/(1024*1024)).toFixed(1) + ' MB';
+  }
+  function fmtTime(s) {
+    const m = Math.floor(s/60), r = Math.floor(s%60);
+    return m + ':' + r.toString().padStart(2,'0');
+  }
+  function getExt(name) {
+    const m = name.match(/\.([^.]+)$/);
+    return m ? m[1].slice(0,3).toUpperCase() : 'DOC';
+  }
+
+  function renderFiles() {
+    const container = document.getElementById('files-list');
+    if (!container) return;
+    if (attachedFiles.length === 0) { container.innerHTML = ''; return; }
+    container.innerHTML = attachedFiles.map((f, i) => `
+      <span class="file">
+        <span class="ico">${f.ext}</span>
+        <span class="name">${f.name}</span>
+        <span class="size">${fmtSize(f.size)}</span>
+        <button class="x" data-idx="${i}" aria-label="Remove">&times;</button>
+      </span>
+    `).join('');
+    container.querySelectorAll('.x').forEach(btn => {
+      btn.addEventListener('click', () => {
+        attachedFiles.splice(parseInt(btn.dataset.idx), 1);
+        renderFiles();
+      });
+    });
+  }
+
+  function showRecordingOverlay() {
+    const dialog = document.querySelector('.dialog');
+    if (!dialog) return;
+    const bars = Array.from({length: 28}, (_, i) =>
+      `<span style="animation-delay:${(i % 7) * 0.08}s"></span>`
+    ).join('');
+    const overlay = document.createElement('div');
+    overlay.className = 'rec-overlay';
+    overlay.id = 'rec-overlay';
+    overlay.innerHTML = `
+      <div class="rec-row">
+        <span class="rec-dot"></span>
+        <span class="rec-label">Listening</span>
+        <span class="rec-time" id="rec-time">0:00</span>
+      </div>
+      <div class="rec-bars">${bars}</div>
+      <button class="rec-stop" id="rec-stop">Stop &amp; transcribe</button>
+    `;
+    dialog.style.position = 'relative';
+    dialog.appendChild(overlay);
+
+    document.getElementById('rec-stop').addEventListener('click', stopRecording);
+
+    recordingSeconds = 0;
+    recordingTimer = setInterval(() => {
+      recordingSeconds += 0.1;
+      const el = document.getElementById('rec-time');
+      if (el) el.textContent = fmtTime(recordingSeconds);
+    }, 100);
+  }
+
+  function hideRecordingOverlay() {
+    const overlay = document.getElementById('rec-overlay');
+    if (overlay) overlay.remove();
+    if (recordingTimer) { clearInterval(recordingTimer); recordingTimer = null; }
+    const voiceBtn = document.getElementById('voice-btn');
+    if (voiceBtn) voiceBtn.classList.remove('recording');
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      const chunks = [];
+      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        hideRecordingOverlay();
+        isRecording = false;
+
+        // Send to server for transcription
+        const formData = new FormData();
+        formData.append('audio', blob, 'recording.webm');
+        const ta = document.getElementById('profile-input');
+        try {
+          ta.placeholder = 'Transcribing...';
+          const resp = await fetch('/transcribe', { method: 'POST', body: formData });
+          const data = await resp.json();
+          if (data.text) {
+            ta.value = ta.value ? ta.value + ' ' + data.text : data.text;
+          }
+        } catch(err) {
+          console.error('Transcription failed:', err);
+        }
+        ta.placeholder = placeholders[activeCat];
+      };
+      mediaRecorder.start();
+      isRecording = true;
+      document.getElementById('voice-btn').classList.add('recording');
+      showRecordingOverlay();
+    } catch(err) {
+      alert('Microphone access denied.');
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     const root = document.getElementById('root');
     root.innerHTML = `
       <div class="hero">
         <div class="eyebrow">A co-listener for the conversations that matter</div>
         <h1 class="wordmark">Ken<span class="tail">.</span></h1>
-        <p class="tagline">Tell us a little about your situation.<br/>We'll listen along and surface what <em>actually</em> matters — in real time.</p>
+        <p class="tagline">Tell us a little about your situation.<br/>We'll listen along and surface what <em>actually</em> matters &mdash; in real time.</p>
       </div>
 
       <div class="chips">
-        <button class="chip active" data-cat="legal"><span class="glyph">§</span>Legal</button>
-        <button class="chip" data-cat="medical"><span class="glyph">℞</span>Medical</button>
-        <button class="chip" data-cat="immigration"><span class="glyph">✦</span>Immigration</button>
-        <button class="chip" data-cat="career"><span class="glyph">¶</span>Career</button>
-        <button class="chip chip-add">+</button>
+        <button class="chip active" data-cat="legal"><span class="glyph">&sect;</span>Legal</button>
+        <button class="chip" data-cat="medical"><span class="glyph">&#8478;</span>Medical</button>
+        <button class="chip" data-cat="immigration"><span class="glyph">&#10022;</span>Immigration</button>
+        <button class="chip" data-cat="career"><span class="glyph">&para;</span>Career</button>
+        <button class="chip chip-add" id="chip-add-btn">+</button>
       </div>
 
       <div class="dialog-wrap">
         <div class="dialog">
           <div class="ta-row">
-            <textarea class="ta" id="profile-input" placeholder="${placeholders.legal}"></textarea>
+            <textarea class="ta" id="profile-input" placeholder="${placeholders.legal}" rows="3"></textarea>
           </div>
           <div class="dialog-actions">
             <div class="dialog-meta">
@@ -525,23 +647,35 @@
             </div>
             <div class="dialog-buttons">
               <button class="iconbtn" id="voice-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+                <span class="lbl">Voice</span>
               </button>
               <button class="iconbtn" id="file-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M21 11.5 12.5 20a5.5 5.5 0 0 1-7.78-7.78L13 4a3.7 3.7 0 0 1 5.24 5.24L9.7 17.78a1.85 1.85 0 0 1-2.62-2.62l7.42-7.42"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5 12.5 20a5.5 5.5 0 0 1-7.78-7.78L13 4a3.7 3.7 0 0 1 5.24 5.24L9.7 17.78a1.85 1.85 0 0 1-2.62-2.62l7.42-7.42"/></svg>
+                <span class="lbl">Attach</span>
               </button>
-              <button class="submitbtn" id="submit-btn">Begin <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg></button>
+              <input type="file" id="file-input" multiple style="display:none" />
+              <button class="submitbtn" id="submit-btn">Begin <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg></button>
             </div>
           </div>
         </div>
+        <div class="files" id="files-list"></div>
       </div>
 
       <div class="foot">
         <div class="divider"></div>
-        <p>Don't take the shortcut. <strong>Ken</strong> doesn't summarize.</p>
-        <p>We show you where to look instead.</p>
+        Ken doesn't summarize. We <strong>show you where to look</strong> &mdash;
+        the jargon worth questioning, the moments that affect you, the things
+        you should write down.
       </div>
     `;
+
+    // Auto-grow textarea
+    const ta = document.getElementById('profile-input');
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(240, ta.scrollHeight) + 'px';
+    });
 
     // Chips
     document.querySelectorAll('.chip:not(.chip-add)').forEach(btn => {
@@ -553,18 +687,37 @@
       });
     });
 
+    // Voice recording
+    document.getElementById('voice-btn').addEventListener('click', () => {
+      if (isRecording) { stopRecording(); }
+      else { startRecording(); }
+    });
+
+    // File attach
+    const fileInput = document.getElementById('file-input');
+    document.getElementById('file-btn').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const newFiles = Array.from(e.target.files).map(f => ({
+        name: f.name, size: f.size, ext: getExt(f.name), file: f
+      }));
+      attachedFiles = [...attachedFiles, ...newFiles];
+      renderFiles();
+      e.target.value = '';
+    });
+
     // Submit
     document.getElementById('submit-btn').addEventListener('click', () => {
       const text = document.getElementById('profile-input').value;
-      if (!text.trim()) return alert('Please describe your situation.');
+      if (!text.trim() && attachedFiles.length === 0) return;
       sessionStorage.setItem('profileCat', activeCat);
       sessionStorage.setItem('profileText', text);
-      window.location.href = '/process.html';
+      window.location.href = '/session';
     });
 
-    // Keyboard
-    document.getElementById('profile-input').addEventListener('keydown', (e) => {
+    // Keyboard shortcut
+    ta.addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
         document.getElementById('submit-btn').click();
       }
     });

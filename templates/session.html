@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ken — Session</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f4ece0;
+    --bg-card: #fffdf8;
+    --ink: #1f1812;
+    --ink-2: #524539;
+    --ink-3: #93836f;
+    --ink-4: #c3b5a0;
+    --line: #ebe0cc;
+    --line-2: #f0e7d7;
+    --accent: #3a4a32;
+    --accent-soft: #ebe7d8;
+
+    /* Trigger hues — warm-shifted to match palette */
+    --jargon: #d97706;     /* amber-600 */
+    --jargon-soft: #fbe6c5;
+    --impact: #dc2626;     /* red-600 */
+    --impact-soft: #f9d3d3;
+    --question: #059669;   /* emerald-600 */
+    --question-soft: #c8ebd9;
+    --commit: #64748b;     /* slate-500 */
+    --commit-soft: #d8dde4;
+
+    --shadow-card: 0 1px 0 rgba(31,24,18,0.04), 0 18px 40px -22px rgba(31,24,18,0.18), 0 6px 14px -8px rgba(31,24,18,0.08);
+    --radius: 18px;
+    --ease: cubic-bezier(.2,.8,.2,1);
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    --font-serif: 'Instrument Serif', 'Times New Roman', serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  body::before {
+    content:""; position: fixed; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(31,24,18,0.025) 1px, transparent 1px);
+    background-size: 3px 3px; mix-blend-mode: multiply; z-index: 0;
+  }
+
+  /* ── Top bar ──────────────────────────────────────────────────── */
+  .topbar {
+    position: relative; z-index: 5;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(244,236,224,0.85);
+    backdrop-filter: blur(8px);
+  }
+  .brand-row { display: flex; align-items: center; gap: 18px; }
+  .brand-mark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-serif); font-size: 22px;
+    color: var(--ink); letter-spacing: -0.01em;
+  }
+  .brand-mark .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .crumb-sep { color: var(--ink-4); font-family: var(--font-mono); font-size: 12px; }
+  .session-meta {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-size: 11.5px;
+    color: var(--ink-3); letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .session-meta .domain {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+    font-weight: 500;
+  }
+  .top-actions { display: flex; align-items: center; gap: 8px; }
+  .btn-ghost {
+    border: 1px solid var(--line); background: rgba(255,255,255,0.5);
+    border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13px;
+    color: var(--ink-2); cursor: pointer; transition: all .15s var(--ease);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-ghost:hover { background: #fff; color: var(--ink); border-color: var(--ink-4); }
+  .btn-solid {
+    border: 1px solid var(--ink); background: var(--ink); color: #f7f4ec;
+    border-radius: 999px; padding: 7px 16px; font: inherit; font-size: 13px;
+    font-weight: 500; cursor: pointer; transition: all .15s var(--ease);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-solid:hover { background: #000; }
+  .btn-solid:disabled { background: var(--line); border-color: var(--line); color: var(--ink-3); cursor: not-allowed; }
+
+  /* ── Workspace ────────────────────────────────────────────────── */
+  .workspace {
+    position: relative; z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 28px 28px 60px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+
+  /* Section frame */
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line-2);
+  }
+  .panel-title {
+    font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-3);
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .panel-title::before {
+    content: ""; width: 18px; height: 1px; background: var(--ink-4);
+  }
+  .panel-tools { display: flex; align-items: center; gap: 8px; }
+  .chev {
+    width: 26px; height: 26px; border: 1px solid var(--line);
+    background: transparent; border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ink-3); cursor: pointer;
+  }
+  .chev:hover { color: var(--ink); border-color: var(--ink-4); background: #fff; }
+
+  /* ── Upload section ───────────────────────────────────────────── */
+  .upload-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 18px;
+    padding: 18px;
+  }
+  .dropzone {
+    border: 1.5px dashed var(--ink-4);
+    border-radius: 14px;
+    background: linear-gradient(135deg, #fbf6ec 0%, #fffdf8 100%);
+    min-height: 220px;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    gap: 10px;
+    text-align: center;
+    padding: 28px;
+    transition: all .2s var(--ease);
+    cursor: pointer;
+    position: relative;
+  }
+  .dropzone:hover { border-color: var(--ink-2); background: #fffdf8; }
+  .dropzone .icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--accent-soft); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .dropzone .label {
+    font-family: var(--font-serif); font-size: 22px; font-style: italic;
+    color: var(--ink); letter-spacing: -0.01em;
+  }
+  .dropzone .hint {
+    font-size: 13px; color: var(--ink-3);
+  }
+  .dropzone .hint kbd {
+    font-family: var(--font-mono); font-size: 10.5px;
+    border: 1px solid var(--line); border-radius: 5px;
+    padding: 1px 6px; background: #fff; color: var(--ink-2);
+  }
+  .dropzone .formats {
+    font-family: var(--font-mono); font-size: 10.5px;
+    color: var(--ink-4); letter-spacing: 0.08em; text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  .dropzone.has-video { padding: 0; cursor: default; border-style: solid; border-color: var(--line); background: #000; }
+  .dropzone.has-video video { width: 100%; height: 100%; max-height: 380px; border-radius: 12px; display: block; }
+
+  .profile-card {
+    border: 1px solid var(--line-2);
+    border-radius: 14px;
+    padding: 16px 18px;
+    background: #fbf6ec;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .profile-card .row-label {
+    font-family: var(--font-mono); font-size: 10.5px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .profile-card .row-value {
+    font-size: 14px; line-height: 1.55; color: var(--ink);
+  }
+  .profile-card .row-value em {
+    font-family: var(--font-serif); font-style: italic; font-size: 1.06em;
+  }
+  .profile-card .domain-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px;
+    background: var(--accent); color: #f7f4ec;
+    font-size: 12.5px; font-weight: 500;
+  }
+  .profile-card .domain-tag .glyph {
+    font-family: var(--font-serif); font-style: italic; font-size: 14px;
+  }
+  .profile-card .actions {
+    display: flex; gap: 8px; margin-top: auto;
+    padding-top: 6px; border-top: 1px dashed var(--line);
+  }
+  .profile-card .actions .btn-solid { flex: 1; justify-content: center; }
+  .profile-card .actions .btn-ghost { padding: 7px 14px; }
+
+  /* ── Playback + Insights split ────────────────────────────────── */
+  .split {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 22px;
+  }
+  @media (max-width: 1080px) {
+    .split, .upload-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Video panel */
+  .video-panel { display: flex; flex-direction: column; }
+  .video-stage {
+    background: #15110d; aspect-ratio: 16/9;
+    display: flex; align-items: center; justify-content: center;
+    color: #6b6049; font-family: var(--font-mono); font-size: 12px;
+    position: relative; overflow: hidden;
+  }
+  .video-stage::after {
+    content: ""; position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 12px, transparent 12px 24px);
+    pointer-events: none;
+  }
+  .video-placeholder { text-align: center; z-index: 1; }
+  .video-placeholder .glyph {
+    font-family: var(--font-serif); font-style: italic;
+    font-size: 56px; color: #d4c4a3; opacity: 0.3; line-height: 1;
+  }
+  .video-placeholder .lbl {
+    margin-top: 12px; color: #8a7a5e; letter-spacing: 0.08em; text-transform: uppercase;
+  }
+
+  /* Transport controls */
+  .transport {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 18px;
+    border-top: 1px solid var(--line-2);
+    background: #fbf6ec;
+  }
+  .play-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--ink); color: #f7f4ec; border: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all .15s var(--ease);
+  }
+  .play-btn:hover { background: #000; }
+  .timecode {
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--ink-2); font-variant-numeric: tabular-nums;
+    min-width: 92px;
+  }
+  .timecode .sep { color: var(--ink-4); margin: 0 4px; }
+  .scrub {
+    flex: 1; height: 4px; border-radius: 2px;
+    background: var(--line); position: relative; cursor: pointer;
+  }
+  .scrub-fill {
+    position: absolute; top: 0; left: 0; height: 100%;
+    width: 32%; background: var(--ink); border-radius: 2px;
+  }
+  .scrub-mark {
+    position: absolute; top: 50%; transform: translate(-50%, -50%);
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--bg-card); border: 1.5px solid;
+  }
+  .scrub-mark[data-trigger="jargon"] { border-color: var(--jargon); }
+  .scrub-mark[data-trigger="impact"] { border-color: var(--impact); }
+  .scrub-mark[data-trigger="question"] { border-color: var(--question); }
+  .scrub-mark[data-trigger="commitment"] { border-color: var(--commit); }
+  .scrub-head {
+    position: absolute; top: 50%; left: 32%;
+    transform: translate(-50%, -50%);
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--ink); border: 3px solid var(--bg-card);
+    box-shadow: 0 0 0 1px var(--ink);
+  }
+  .speed-pill {
+    border: 1px solid var(--line); background: #fff;
+    border-radius: 999px; padding: 4px 10px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-2);
+    cursor: pointer;
+  }
+
+  /* ── Insights panel ───────────────────────────────────────────── */
+  .insights-panel { display: flex; flex-direction: column; max-height: 720px; }
+  .insight-counts {
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.04em;
+  }
+  .filters {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--line-2);
+    background: #fbf6ec;
+  }
+  .filter {
+    border: 1px solid var(--line); background: #fff;
+    color: var(--ink-2); border-radius: 999px;
+    padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 500;
+    cursor: pointer; transition: all .15s var(--ease);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .filter:hover { border-color: var(--ink-4); }
+  .filter .swatch {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--ink-4);
+  }
+  .filter[data-trigger="jargon"] .swatch { background: var(--jargon); }
+  .filter[data-trigger="impact"] .swatch { background: var(--impact); }
+  .filter[data-trigger="question"] .swatch { background: var(--question); }
+  .filter[data-trigger="commitment"] .swatch { background: var(--commit); }
+  .filter[data-trigger="all"] .swatch { background: var(--ink); }
+  .filter.active {
+    background: var(--ink); color: #f7f4ec; border-color: var(--ink);
+  }
+  .filter.active .swatch { background: #f7f4ec; }
+  .filter .count {
+    font-family: var(--font-mono); opacity: 0.7;
+    font-size: 11px; margin-left: 2px;
+  }
+
+  .cards-scroll {
+    overflow-y: auto;
+    padding: 14px 16px 18px;
+    flex: 1;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .cards-scroll::-webkit-scrollbar { width: 6px; }
+  .cards-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+  .card {
+    background: #fffdf8;
+    border: 1px solid var(--line);
+    border-left: 3px solid;
+    border-radius: 12px;
+    padding: 14px 16px;
+    transition: all .25s var(--ease);
+    position: relative;
+  }
+  .card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px -10px rgba(31,24,18,0.12);
+  }
+  .card.active {
+    box-shadow: 0 0 0 2px var(--accent-soft), 0 8px 24px -10px rgba(31,24,18,0.15);
+  }
+  .card[data-trigger="jargon"] { background: color-mix(in oklab, var(--jargon) 10%, #fffdf8); border-color: color-mix(in oklab, var(--jargon) 22%, var(--line)); border-left-color: var(--jargon); }
+  .card[data-trigger="impact"] { background: color-mix(in oklab, var(--impact) 9%, #fffdf8); border-color: color-mix(in oklab, var(--impact) 22%, var(--line)); border-left-color: var(--impact); }
+  .card[data-trigger="question"] { background: color-mix(in oklab, var(--question) 10%, #fffdf8); border-color: color-mix(in oklab, var(--question) 22%, var(--line)); border-left-color: var(--question); }
+  .card[data-trigger="commitment"] { background: color-mix(in oklab, var(--commit) 11%, #fffdf8); border-color: color-mix(in oklab, var(--commit) 25%, var(--line)); border-left-color: var(--commit); }
+
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px; gap: 10px;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 9px; border-radius: 6px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .badge[data-trigger="jargon"] { background: var(--jargon-soft); color: var(--jargon); }
+  .badge[data-trigger="impact"] { background: var(--impact-soft); color: var(--impact); }
+  .badge[data-trigger="question"] { background: var(--question-soft); color: var(--question); }
+  .badge[data-trigger="commitment"] { background: var(--commit-soft); color: var(--commit); }
+  .card-title {
+    font-size: 14.5px; font-weight: 600; color: var(--ink);
+    letter-spacing: -0.01em;
+    flex: 1; margin-left: 8px;
+  }
+  .card-time {
+    font-family: var(--font-mono); font-size: 11.5px;
+    color: var(--ink-3); font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+  .card-time:hover { color: var(--ink); }
+  .card-summary {
+    font-size: 14px; line-height: 1.55; color: var(--ink);
+    margin-bottom: 6px;
+  }
+  .card-detail {
+    font-size: 13px; line-height: 1.6; color: var(--ink-2);
+  }
+  .card-action {
+    margin-top: 10px; padding: 9px 12px;
+    background: #ffffff; border-radius: 8px;
+    border-left: 2px solid var(--accent);
+    font-size: 13px; color: var(--ink);
+  }
+  .card-action::before { content: "→ "; color: var(--accent); font-weight: 600; }
+
+  /* Tracked todo */
+  .todo-row { display: flex; gap: 12px; align-items: flex-start; }
+  .todo-check {
+    flex-shrink: 0;
+    width: 20px; height: 20px;
+    border: 1.5px solid color-mix(in oklab, var(--commit) 60%, var(--ink-4));
+    border-radius: 6px;
+    background: #fffdf8;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff;
+    transition: all .15s var(--ease);
+    margin-top: 1px;
+  }
+  .todo-check:hover { border-color: var(--commit); }
+  .todo-check.checked {
+    background: var(--commit); border-color: var(--commit);
+  }
+  .todo-body { flex: 1; min-width: 0; }
+  .todo-title {
+    font-size: 14.5px; font-weight: 600; color: var(--ink);
+    letter-spacing: -0.01em; margin-bottom: 4px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .todo-flag {
+    font-family: var(--font-mono); font-size: 9.5px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    background: var(--commit); color: #fff;
+    padding: 2px 6px; border-radius: 4px; font-weight: 600;
+  }
+  .todo-foot {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed color-mix(in oklab, var(--commit) 22%, var(--line));
+    font-size: 12px;
+  }
+  .todo-foot .card-time {
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+  .todo-time {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    cursor: pointer;
+    margin-left: 4px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .todo-time:hover { color: var(--commit); }
+  .card.done .todo-title,
+  .card.done .card-summary,
+  .card.done .card-detail {
+    color: var(--ink-3);
+    text-decoration: line-through;
+    text-decoration-color: var(--ink-4);
+  }
+  .card.done { opacity: 0.7; }
+  .quote {
+    font-family: var(--font-serif); font-style: italic;
+    font-size: 14.5px; line-height: 1.5;
+    color: var(--ink-2); margin-bottom: 8px;
+    padding-left: 10px; border-left: 2px solid color-mix(in oklab, var(--question) 40%, var(--line));
+  }
+  .suggested {
+    padding: 10px 12px; background: #ffffff;
+    border-radius: 8px; font-size: 14px; font-weight: 500;
+    color: var(--ink); margin: 8px 0;
+    border-left: 2px solid var(--accent);
+  }
+
+  /* ── Debug ────────────────────────────────────────────────────── */
+  .debug-panel { font-family: var(--font-mono); font-size: 12px; }
+  .debug-body {
+    padding: 14px 18px; color: var(--ink-2);
+    max-height: 0; overflow: hidden; transition: max-height .3s var(--ease);
+    border-top: 1px solid var(--line-2);
+  }
+  .debug-panel.open .debug-body { max-height: 280px; overflow: auto; }
+  .debug-body pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+  .debug-panel .chev svg { transition: transform .2s var(--ease); }
+  .debug-panel.open .chev svg { transform: rotate(180deg); }
+
+  /* Section eyebrow */
+  .section-eyebrow {
+    font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-3);
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 4px 4px;
+  }
+  .section-eyebrow .num {
+    font-family: var(--font-serif); font-style: italic;
+    font-size: 16px; color: var(--ink-2); letter-spacing: 0;
+  }
+  .section-eyebrow::after {
+    content: ""; flex: 1; height: 1px; background: var(--line);
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-row">
+      <div class="brand-mark"><span class="dot"></span> Ken</div>
+      <span class="crumb-sep">/</span>
+      <div class="session-meta">
+        <span>Session</span>
+        <span class="domain"><span style="font-family:var(--font-serif);font-style:italic;">§</span> Legal</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="btn-ghost" id="back-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+        Back
+      </button>
+      <button class="btn-ghost">Export</button>
+      <button class="btn-solid">
+        <span style="width:6px;height:6px;border-radius:50%;background:#9bd0a0;display:inline-block;"></span>
+        Live
+      </button>
+    </div>
+  </header>
+
+  <div class="workspace" id="root"></div>
+
+  <script>
+  const LABELS = { jargon: 'Jargon', impact: 'Impact', question: 'Ask This', commitment: 'Tracked' };
+  const GLYPHS = { legal: '§', medical: '℞', immigration: '✦', career: '¶' };
+
+  let cards = [];
+  let filter = 'all';
+  let currentTime = 0;
+  let totalDuration = 0;
+  let doneIds = new Set();
+  let videoEl = null;
+  let profileCat = sessionStorage.getItem('profileCat') || 'legal';
+  let profileText = sessionStorage.getItem('profileText') || '';
+  // Escape for safe HTML injection
+  let profileTextSafe = profileText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  function fmtTime(s) {
+    const m = Math.floor(s/60), r = Math.floor(s%60);
+    return m + ':' + r.toString().padStart(2,'0');
+  }
+
+  function renderCard(c, idx) {
+    const isCommit = c.trigger === 'commitment';
+    const checked = doneIds.has(idx);
+    const doneClass = isCommit && checked ? ' done' : '';
+    const ts = c.timestamp;
+
+    if (c.trigger === 'question') {
+      return `<div class="card${doneClass}" data-trigger="${c.trigger}" data-idx="${idx}">
+        <div class="card-head">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;">
+            <span class="badge" data-trigger="${c.trigger}">${LABELS[c.trigger]}</span>
+            <span class="card-title">Better question</span>
+          </div>
+          <span class="card-time" data-jump="${ts}">${fmtTime(ts)}</span>
+        </div>
+        <div class="quote">"${c.vague || c.data?.question?.vague_phrase || ''}"</div>
+        <div class="suggested">"${c.suggested || c.data?.question?.suggested_question || ''}"</div>
+        <div class="card-detail">${c.detail || c.data?.question?.why_it_matters || ''}</div>
+      </div>`;
+    }
+
+    if (isCommit) {
+      const items = c.data?.commitments || [c];
+      return items.map((item, subIdx) => {
+        const itemIdx = idx + '_' + subIdx;
+        const itemChecked = doneIds.has(itemIdx);
+        return `<div class="card${itemChecked ? ' done' : ''}" data-trigger="commitment" data-idx="${itemIdx}">
+          <div class="card-head">
+            <span class="badge" data-trigger="commitment">${LABELS.commitment}</span>
+          </div>
+          <div class="todo-row">
+            <button class="todo-check${itemChecked ? ' checked' : ''}" data-todo="${itemIdx}">
+              ${itemChecked ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>' : ''}
+            </button>
+            <div class="todo-body">
+              <div class="todo-title">${item.title || ''}${item.actionable ? '<span class="todo-flag">action</span>' : ''}</div>
+              <div class="card-summary">${item.summary || ''}</div>
+              <div class="card-detail">${item.detail || ''} <span class="todo-time" data-jump="${ts}">↳ ${fmtTime(ts)}</span></div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // jargon or impact
+    const title = c.title || c.data?.impact?.title || (c.data?.cards?.[0]?.title) || '';
+    const summary = c.summary || c.data?.impact?.summary || (c.data?.cards?.[0]?.summary) || '';
+    const detail = c.detail || c.data?.impact?.detail || (c.data?.cards?.[0]?.detail) || '';
+    const action = c.action || c.data?.impact?.action || '';
+
+    return `<div class="card${doneClass}" data-trigger="${c.trigger}" data-idx="${idx}">
+      <div class="card-head">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;">
+          <span class="badge" data-trigger="${c.trigger}">${LABELS[c.trigger]}</span>
+          <span class="card-title">${title}</span>
+        </div>
+        <span class="card-time" data-jump="${ts}">${fmtTime(ts)}</span>
+      </div>
+      ${summary ? `<div class="card-summary">${summary}</div>` : ''}
+      ${detail ? `<div class="card-detail">${detail}</div>` : ''}
+      ${action ? `<div class="card-action">${action}</div>` : ''}
+    </div>`;
+  }
+
+  function renderCards() {
+    const container = document.getElementById('cards-scroll');
+    const visible = cards.filter(c =>
+      (filter === 'all' || c.trigger === filter) && c.timestamp <= currentTime
+    );
+    if (visible.length === 0) {
+      container.innerHTML = `<div style="padding:40px 18px;text-align:center;color:var(--ink-3);font-size:13.5px;">
+        <div style="font-family:var(--font-serif);font-style:italic;font-size:32px;color:var(--ink-4);margin-bottom:8px;">—</div>
+        Listening. Insights will appear as the conversation unfolds.
+      </div>`;
+    } else {
+      container.innerHTML = visible.map((c, i) => renderCard(c, cards.indexOf(c))).join('');
+    }
+
+    // Update counts
+    const countEl = document.getElementById('insight-count');
+    if (countEl) countEl.textContent = `${visible.length}/${cards.length}`;
+
+    // Bind todo toggles
+    container.querySelectorAll('.todo-check').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.todo;
+        doneIds.has(id) ? doneIds.delete(id) : doneIds.add(id);
+        renderCards();
+      });
+    });
+
+    // Bind time jumps
+    container.querySelectorAll('[data-jump]').forEach(el => {
+      el.addEventListener('click', () => {
+        const t = parseFloat(el.dataset.jump);
+        if (videoEl) { videoEl.currentTime = t; }
+      });
+    });
+  }
+
+  function renderScrubMarks() {
+    const scrub = document.getElementById('scrub');
+    if (!scrub) return;
+    // Remove existing marks
+    scrub.querySelectorAll('.scrub-mark').forEach(m => m.remove());
+    // Add marks for each card
+    const dur = totalDuration || 1;
+    cards.forEach(c => {
+      const mark = document.createElement('span');
+      mark.className = 'scrub-mark';
+      mark.dataset.trigger = c.trigger;
+      mark.style.left = ((c.timestamp / dur) * 100) + '%';
+      scrub.appendChild(mark);
+    });
+  }
+
+  function renderFilters() {
+    const counts = { jargon:0, impact:0, question:0, commitment:0 };
+    cards.forEach(c => counts[c.trigger]++);
+    const total = cards.length;
+    const triggers = [
+      { id:'all', label:'All', count: total },
+      { id:'jargon', label:'Jargon', count: counts.jargon },
+      { id:'impact', label:'Impact', count: counts.impact },
+      { id:'question', label:'Questions', count: counts.question },
+      { id:'commitment', label:'Tracked', count: counts.commitment }
+    ];
+    document.getElementById('filters').innerHTML = triggers.map(t =>
+      `<button class="filter${filter === t.id ? ' active' : ''}" data-trigger="${t.id}" data-filter="${t.id}">
+        <span class="swatch"></span>${t.label}<span class="count">${t.count}</span>
+      </button>`
+    ).join('');
+
+    document.querySelectorAll('[data-filter]').forEach(btn => {
+      btn.addEventListener('click', () => { filter = btn.dataset.filter; renderFilters(); renderCards(); });
+    });
+  }
+
+  function buildPage() {
+    // Update topbar domain chip
+    const domainEl = document.querySelector('.session-meta .domain');
+    if (domainEl) {
+      domainEl.innerHTML = `<span style="font-family:var(--font-serif);font-style:italic;">${GLYPHS[profileCat] || '§'}</span> ${profileCat.charAt(0).toUpperCase() + profileCat.slice(1)}`;
+    }
+
+    const root = document.getElementById('root');
+    root.innerHTML = `
+      <div>
+        <div class="section-eyebrow"><span class="num">i.</span> Source material</div>
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-title">Upload</span>
+            <span id="file-meta" style="font-family:var(--font-mono);font-size:11px;color:var(--ink-3);">No file selected</span>
+          </div>
+          <div class="upload-grid">
+            <div class="dropzone" id="dropzone">
+              <span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg></span>
+              <span class="label">Drop a recording.</span>
+              <span class="hint">or click to browse · paste with <kbd>⌘V</kbd></span>
+              <span class="formats">MP4 · MOV · M4A · WAV · MP3</span>
+              <input type="file" id="video-input" accept="video/*,audio/*" style="display:none" />
+            </div>
+            <div class="profile-card">
+              <div>
+                <div class="row-label">Domain</div>
+                <div style="margin-top:6px"><span class="domain-tag"><span class="glyph">${GLYPHS[profileCat] || '§'}</span> ${profileCat.charAt(0).toUpperCase() + profileCat.slice(1)}</span></div>
+              </div>
+              <div>
+                <div class="row-label">Your situation</div>
+                <div class="row-value" id="situation-summary" style="margin-top:6px">${profileTextSafe || 'No context provided.'}</div>
+              </div>
+              <div class="actions">
+                <button class="btn-ghost" onclick="window.location.href='/'">Edit profile</button>
+                <button class="btn-solid" id="process-btn" disabled>Process <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-eyebrow"><span class="num">ii.</span> Listening & insight</div>
+        <div class="split">
+          <div class="panel video-panel">
+            <div class="panel-head">
+              <span class="panel-title">Playback</span>
+              <span class="insight-counts" id="insight-count">0/0</span>
+            </div>
+            <div class="video-stage" id="video-stage">
+              <div class="video-placeholder">
+                <div class="glyph">▶</div>
+                <div class="lbl">Waiting for upload</div>
+              </div>
+            </div>
+            <div class="transport">
+              <button class="play-btn" id="play-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+              <span class="timecode" id="timecode">0:00<span class="sep">/</span>0:00</span>
+              <div class="scrub" id="scrub">
+                <div class="scrub-fill" id="scrub-fill" style="width:0%"></div>
+                <div class="scrub-head" id="scrub-head" style="left:0%"></div>
+              </div>
+              <button class="speed-pill">1.0×</button>
+            </div>
+          </div>
+          <div class="panel insights-panel">
+            <div class="panel-head">
+              <span class="panel-title">Insights</span>
+              <span class="insight-counts" id="insight-count-2">0/0</span>
+            </div>
+            <div class="filters" id="filters"></div>
+            <div class="cards-scroll" id="cards-scroll"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel debug-panel" id="debug-panel">
+          <div class="panel-head" style="cursor:pointer" id="debug-toggle">
+            <span class="panel-title">Debug · raw JSON</span>
+            <button class="chev"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+          </div>
+          <div class="debug-body"><pre id="debug-json">{}</pre></div>
+        </div>
+      </div>
+    `;
+
+    // Wire up interactions
+    const dropzone = document.getElementById('dropzone');
+    const videoInput = document.getElementById('video-input');
+    const processBtn = document.getElementById('process-btn');
+    let uploadedFile = null;
+
+    dropzone.addEventListener('click', (e) => {
+      if (uploadedFile) return; // Don't re-open file picker after upload
+      videoInput.click();
+    });
+    videoInput.addEventListener('change', (e) => {
+      uploadedFile = e.target.files[0];
+      if (!uploadedFile) return;
+
+      // Show video in the video-stage panel (not in dropzone)
+      const videoStage = document.getElementById('video-stage');
+      videoStage.innerHTML = `<video id="main-video" controls style="width:100%;height:100%;object-fit:contain;"></video>`;
+      const vid = document.getElementById('main-video');
+      vid.src = URL.createObjectURL(uploadedFile);
+      videoEl = vid;
+
+      // Update dropzone to show uploaded state
+      dropzone.classList.add('has-video');
+      const fname = uploadedFile.name.replace(/</g, '&lt;');
+      dropzone.innerHTML = '<div style="padding:20px;text-align:center;">' +
+        '<div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-2);margin-bottom:4px;">' + fname + '</div>' +
+        '<div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-3);">Ready to process</div></div>';
+
+      processBtn.disabled = false;
+      document.getElementById('file-meta').textContent = uploadedFile.name;
+
+      // Sync playback with transport bar + card rendering
+      vid.addEventListener('timeupdate', () => {
+        currentTime = vid.currentTime;
+        totalDuration = vid.duration || 1;
+        const pct = (currentTime / totalDuration) * 100;
+        document.getElementById('scrub-fill').style.width = pct + '%';
+        document.getElementById('scrub-head').style.left = pct + '%';
+        document.getElementById('timecode').innerHTML =
+          fmtTime(currentTime) + '<span class="sep">/</span>' + fmtTime(totalDuration);
+        renderCards();
+      });
+      vid.addEventListener('play', () => {
+        playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+      });
+      vid.addEventListener('pause', () => {
+        playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      });
+    });
+
+    // Play button with icon toggle
+    const playBtn = document.getElementById('play-btn');
+    playBtn.addEventListener('click', () => {
+      if (!videoEl) return;
+      if (videoEl.paused) {
+        videoEl.play();
+        playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+      } else {
+        videoEl.pause();
+        playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      }
+    });
+
+    // Scrub click
+    document.getElementById('scrub').addEventListener('click', (e) => {
+      if (!videoEl) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      videoEl.currentTime = pct * totalDuration;
+    });
+
+    // Process button
+    processBtn.addEventListener('click', async () => {
+      processBtn.disabled = true;
+      processBtn.innerHTML = 'Processing…';
+
+      const formData = new FormData();
+      formData.append('video', uploadedFile);
+      formData.append('profile_text', profileText);
+      formData.append('profile_cat', profileCat);
+
+      try {
+        const resp = await fetch('/process', { method: 'POST', body: formData });
+        const result = await resp.json();
+        cards = result.cards || [];
+        totalDuration = videoEl ? videoEl.duration : 300;
+        document.getElementById('debug-json').textContent = JSON.stringify(result, null, 2);
+
+        // Update situation summary from LLM
+        if (result.summary) {
+          const el = document.getElementById('situation-summary');
+          if (el) el.innerHTML = '<em>' + result.summary + '</em>';
+        }
+
+        // Render scrub marks on the timeline
+        renderScrubMarks();
+
+        // Show all cards immediately (user can then replay to see them appear one by one)
+        currentTime = totalDuration;
+        renderFilters();
+        renderCards();
+
+        // Reset to beginning for playback
+        if (videoEl) videoEl.currentTime = 0;
+        currentTime = 0;
+        renderCards();
+
+        processBtn.innerHTML = 'Done ✓';
+        processBtn.disabled = false;
+
+        // Now switch to time-synced mode: cards show as video plays
+        if (videoEl) {
+          videoEl.addEventListener('play', () => {
+            playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+          });
+          videoEl.addEventListener('pause', () => {
+            playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+          });
+        }
+      } catch(err) {
+        processBtn.innerHTML = 'Error — retry';
+        processBtn.disabled = false;
+        console.error(err);
+      }
+    });
+
+    // Debug toggle
+    document.getElementById('debug-toggle').addEventListener('click', () => {
+      document.getElementById('debug-panel').classList.toggle('open');
+    });
+
+    // Back button
+    document.getElementById('back-btn').addEventListener('click', () => {
+      window.location.href = '/';
+    });
+
+    renderFilters();
+    renderCards();
+  }
+
+  document.addEventListener('DOMContentLoaded', buildPage);
+  </script>
+</body>
+</html>
